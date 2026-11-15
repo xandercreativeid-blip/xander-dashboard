@@ -1,7 +1,9 @@
--- Xander Creative Agency — Content Performance Dashboard
--- Jalankan seluruh file ini sekali di Supabase: SQL Editor > New query > Run.
+-- Xander Creative — Content Performance Dashboard
+-- Struktur database Supabase (sudah diterapkan ke project lewat migrasi; file ini sebagai arsip).
 
 create extension if not exists pgcrypto;
+create extension if not exists pg_net;
+create extension if not exists pg_cron;
 
 create table if not exists brands (
   id           uuid primary key default gen_random_uuid(),
@@ -39,52 +41,68 @@ create index if not exists contents_due_idx on contents (next_fetch_at);
 create index if not exists contents_req_idx on contents (refresh_requested_at) where refresh_requested_at is not null;
 create index if not exists contents_brand_idx on contents (brand_id, posted_at);
 
-create table if not exists settings (
-  key   text primary key,
-  value jsonb not null
+create table if not exists settings (key text primary key, value jsonb not null);
+
+-- Kunci rahasia (YouTube API key, sesi IG): hanya dibaca oleh pengambil data, tidak oleh dashboard.
+create table if not exists private_config (key text primary key, value text not null);
+
+-- Daftar email anggota tim yang boleh membuka dashboard.
+create table if not exists team_members (
+  email    text primary key check (email = lower(email)),
+  added_at timestamptz not null default now()
 );
 
--- Hanya user yang login (tim internal) yang bisa membaca/mengubah data.
-alter table brands   enable row level security;
-alter table contents enable row level security;
-alter table settings enable row level security;
+create or replace function is_member() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from team_members where email = lower(auth.jwt() ->> 'email'));
+$$;
+revoke all on function is_member() from public, anon;
+grant execute on function is_member() to authenticated;
 
-drop policy if exists team_all on brands;
-drop policy if exists team_all on contents;
-drop policy if exists team_all on settings;
-create policy team_all on brands   for all to authenticated using (true) with check (true);
-create policy team_all on contents for all to authenticated using (true) with check (true);
-create policy team_all on settings for all to authenticated using (true) with check (true);
+alter table brands         enable row level security;
+alter table contents       enable row level security;
+alter table settings       enable row level security;
+alter table team_members   enable row level security;
+alter table private_config enable row level security;   -- tanpa policy: tertutup dari dashboard
 
--- ---------------------------------------------------------------------------
--- OPSIONAL: tombol "Refresh" langsung menyalakan pengambil data di GitHub
--- (tanpa ini, permintaan refresh diproses pada jadwal berikutnya).
--- Isi tabel private_config lewat SQL Editor (lihat README, langkah 6).
--- ---------------------------------------------------------------------------
-create extension if not exists pg_net;
+create policy team_all on brands       for all to authenticated using (is_member()) with check (is_member());
+create policy team_all on contents     for all to authenticated using (is_member()) with check (is_member());
+create policy team_all on settings     for all to authenticated using (is_member()) with check (is_member());
+create policy team_all on team_members for all to authenticated using (is_member()) with check (is_member());
 
-create table if not exists private_config (
-  key   text primary key,
-  value text not null
-);
-alter table private_config enable row level security;  -- tanpa policy: tidak bisa dibaca dari dashboard
-
-create or replace function trigger_collector() returns text
-language plpgsql security definer set search_path = public, net as $$
-declare repo text; token text;
+create or replace function set_private_config(p_key text, p_value text) returns void
+language plpgsql security definer set search_path = public as $$
 begin
-  select value into repo  from private_config where key = 'github_repo';
-  select value into token from private_config where key = 'github_token';
-  if repo is null or token is null then return 'not_configured'; end if;
-  perform net.http_post(
-    url     := 'https://api.github.com/repos/' || repo || '/dispatches',
-    body    := '{"event_type":"refresh"}'::jsonb,
-    headers := jsonb_build_object(
-      'Authorization', 'Bearer ' || token,
-      'Accept', 'application/vnd.github+json',
-      'User-Agent', 'content-dashboard',
-      'Content-Type', 'application/json'));
-  return 'triggered';
+  if not is_member() then raise exception 'bukan anggota tim'; end if;
+  if p_key not in ('youtube_api_key', 'ig_sessionid') then raise exception 'kunci tidak dikenal'; end if;
+  if coalesce(trim(p_value), '') = '' then
+    delete from private_config where key = p_key;
+  else
+    insert into private_config (key, value) values (p_key, trim(p_value))
+    on conflict (key) do update set value = excluded.value;
+  end if;
 end $$;
-revoke all on function trigger_collector() from public, anon;
-grant execute on function trigger_collector() to authenticated;
+revoke all on function set_private_config(text, text) from public, anon;
+grant execute on function set_private_config(text, text) to authenticated;
+
+create or replace function private_config_status() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when is_member() then jsonb_build_object(
+    'youtube_api_key', exists (select 1 from private_config where key = 'youtube_api_key'),
+    'ig_sessionid',    exists (select 1 from private_config where key = 'ig_sessionid'))
+  else '{}'::jsonb end;
+$$;
+revoke all on function private_config_status() from public, anon;
+grant execute on function private_config_status() to authenticated;
+
+-- Jadwal: panggil pengambil data (Edge Function "collect") tiap 5 menit.
+-- Ganti <PROJECT> dan <ANON_JWT> dengan milik project (kunci "anon" lama yang berbentuk JWT).
+-- select cron.schedule('collect-every-5-min', '*/5 * * * *', $cron$
+--   select net.http_post(
+--     url := 'https://<PROJECT>.supabase.co/functions/v1/collect',
+--     body := '{"action":"run"}'::jsonb,
+--     headers := '{"Content-Type":"application/json","Authorization":"Bearer <ANON_JWT>"}'::jsonb,
+--     timeout_milliseconds := 10000);
+-- $cron$);
+-- select cron.schedule('cleanup-http-responses', '17 3 * * *',
+--   $cron$ delete from net._http_response where created < now() - interval '1 day'; $cron$);

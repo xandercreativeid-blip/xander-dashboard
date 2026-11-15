@@ -128,6 +128,7 @@ textarea { min-height: 150px; resize: vertical; font-family: ui-monospace, Menlo
 <script src="config.js"></script>
 <script src="demo-data.js"></script>
 <script src="urls.js"></script>
+<script src="sheet.js"></script>
 <script>
 'use strict';
 const CFG = window.XANDER_CONFIG || {};
@@ -216,19 +217,50 @@ const DB = {
     if (LIVE) this.ok(await this.sb.from('contents').delete().eq('id', id));
     S.contents = S.contents.filter((c) => c.id !== id);
   },
+  async fn(body) {
+    const { data } = await this.sb.auth.getSession();
+    return fetch(`${CFG.supabaseUrl}/functions/v1/collect`, {
+      method: 'POST', body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json', apikey: CFG.supabaseAnonKey, Authorization: `Bearer ${data.session?.access_token || CFG.supabaseAnonKey}` },
+    });
+  },
+  // Sedikit konten: ambil sekarang dan tunggu hasilnya. Banyak: tandai, diproses bertahap di latar belakang.
   async requestRefresh(ids) {
-    const now = new Date().toISOString();
-    if (LIVE) {
-      for (let i = 0; i < ids.length; i += 200) this.ok(await this.sb.from('contents').update({ refresh_requested_at: now }).in('id', ids.slice(i, i + 200)));
+    if (!LIVE) return 'demo';
+    if (ids.length <= 30) {
+      const res = await this.fn({ action: 'run', ids });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+      const out = await res.json();
+      const rows = this.ok(await this.sb.from('contents').select('*').in('id', ids));
+      const got = new Map(rows.map((r) => [r.id, r])), set = new Set(ids);
+      S.contents = S.contents.filter((c) => !set.has(c.id) || got.has(c.id)).map((c) => got.get(c.id) || c);
+      return out;
     }
+    const now = new Date().toISOString();
+    for (let i = 0; i < ids.length; i += 200) this.ok(await this.sb.from('contents').update({ refresh_requested_at: now }).in('id', ids.slice(i, i + 200)));
     const set = new Set(ids);
     for (const c of S.contents) if (set.has(c.id)) c.refresh_requested_at = now;
-    return this.kick();
+    this.kick();
+    return 'queued';
   },
-  async kick() {
-    if (!LIVE) return 'demo';
-    try { return this.ok(await this.sb.rpc('trigger_collector')); } catch { return 'not_configured'; }
+  kick() { if (LIVE) this.fn({ action: 'run' }).catch(() => {}); },
+  async downloadSheet(url) {
+    const res = await this.fn({ action: 'sheet', url });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Sheet tidak bisa diunduh (HTTP ${res.status})`);
+    return res.arrayBuffer();
   },
+  async isMember() { return !!this.ok(await this.sb.rpc('is_member')); },
+  async getTeam() { return this.ok(await this.sb.from('team_members').select('email').order('email')).map((r) => r.email); },
+  async setTeam(emails, mine) {
+    const want = new Set(emails.map((e) => e.trim().toLowerCase()).filter((e) => /^\S+@\S+\.\S+$/.test(e)));
+    want.add(mine.toLowerCase());                       // jangan sampai mengunci diri sendiri
+    const have = new Set(await this.getTeam());
+    const add = [...want].filter((e) => !have.has(e)), del = [...have].filter((e) => !want.has(e));
+    if (add.length) this.ok(await this.sb.from('team_members').insert(add.map((email) => ({ email }))));
+    if (del.length) this.ok(await this.sb.from('team_members').delete().in('email', del));
+  },
+  async setPrivate(key, value) { this.ok(await this.sb.rpc('set_private_config', { p_key: key, p_value: value })); },
+  async privateStatus() { try { return this.ok(await this.sb.rpc('private_config_status')) || {}; } catch { return {}; } },
   async setSetting(key, value) {
     if (LIVE) this.ok(await this.sb.from('settings').upsert({ key, value }));
     S.settings[key] = value;
@@ -294,7 +326,7 @@ function render() {
   const target = brand ? brand.views_target : null;
   const range = periodRange();
   const periodText = range ? `${dateLabel(range[0] === '0000-01-01' ? null : range[0])} – ${dateLabel(range[1] === '9999-12-31' ? null : range[1])}` : 'Semua waktu';
-  const cs = S.settings.collector_status;
+  const cs = [S.settings.collector_status, S.settings.collector_heartbeat].filter((x) => x?.at).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
 
   $('#root').innerHTML = `
   <div class="app">
@@ -320,7 +352,7 @@ function render() {
       <div class="head">
         <div>
           <h1>${esc(brand ? brand.name : 'Semua Brand')}</h1>
-          <div class="sub">${brand ? `Target views per konten: <b class="num">${nf.format(target)}</b>` : `${S.brands.length} brand · target views mengikuti setelan tiap brand`}${cs?.at ? ` · Data terakhir diambil ${ago(cs.at)}` : ''}</div>
+          <div class="sub">${brand ? `Target views per konten: <b class="num">${nf.format(target)}</b>` : `${S.brands.length} brand · target views mengikuti setelan tiap brand`}${cs?.at ? ` · Pengambil data aktif ${ago(cs.at)}` : ''}</div>
         </div>
         <div class="actions">
           ${brand ? '<button class="btn" id="editBrand">Atur brand</button>' : ''}
@@ -546,11 +578,67 @@ function bindTable(list) {
 }
 async function doRefresh(ids) {
   try {
+    toast(ids.length <= 30 ? 'Mengambil data terbaru…' : 'Mengirim permintaan refresh…');
     const r = await DB.requestRefresh(ids);
-    toast(r === 'demo' ? 'Mode pratinjau: refresh tidak dijalankan.' : r === 'triggered' ? `Refresh ${ids.length} konten dimulai. Muat ulang halaman 1–2 menit lagi.` : `Refresh ${ids.length} konten dicatat, diproses pada jadwal pengambilan berikutnya.`);
+    if (r === 'demo') toast('Mode pratinjau: refresh tidak dijalankan.');
+    else if (r === 'queued') toast(`${nf.format(ids.length)} konten masuk antrean dan diperbarui bertahap (±35 konten TikTok per 5 menit).`);
+    else {
+      const ok = r.tiktok.ok + r.youtube.ok + r.instagram.ok, bad = r.queued - ok;
+      const why = r.instagram.error || r.youtube.error || r.tiktok.error;
+      toast(`${ok} konten diperbarui` + (bad ? `, ${bad} tidak bisa diambil${why ? ' (' + why + ')' : ''}.` : '.'));
+    }
     render();
   } catch (e) { toast('Gagal: ' + e.message); }
 }
+
+// ---------------------------------------------------------------- sinkronisasi Google Sheets
+function loadScript(src) {
+  return new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => fail(new Error('Gagal memuat ' + src)); document.head.append(s); });
+}
+async function syncSheet(silent = false) {
+  const cfg = S.settings.sheet;
+  if (!LIVE || !cfg?.url) return null;
+  if (!window.XLSX) await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+  const tabs = XSheet.parseWorkbook(window.XLSX, await DB.downloadSheet(cfg.url), cfg.exclude_tabs || []);
+  const stats = { at: new Date().toISOString(), brands: 0, added: 0, updated: 0 };
+  for (const tab of tabs) {
+    const norm = (t) => String(t || '').trim().toLowerCase();
+    let brand = S.brands.find((b) => norm(b.sheet_tab || b.name) === norm(tab.tab));
+    if (!brand) { brand = await DB.addBrand({ name: tab.tab.trim(), sheet_tab: tab.tab }); stats.brands++; }
+    const byKey = new Map();
+    for (const c of S.contents) if (c.brand_id === brand.id) { byKey.set(c.platform + ':' + c.external_id, c); for (const a of c.aliases || []) byKey.set(c.platform + ':' + a, c); }
+    const fresh = [], patches = [];
+    for (const l of tab.links) {
+      const cur = byKey.get(l.platform + ':' + l.key);
+      const hasData = METRICS.some((k) => l.sheet[k] !== null);
+      if (!cur) {
+        const row = { brand_id: brand.id, platform: l.platform, external_id: l.key, url: l.url, posted_at: l.sheet.posted_at };
+        if (hasData) Object.assign(row, { views: l.sheet.views, likes: l.sheet.likes, comments: l.sheet.comments, shares: l.sheet.shares, saves: l.sheet.saves, source: 'sheet' });
+        else Object.assign(row, { views: null, likes: null, comments: null, shares: null, saves: null, source: 'none' });
+        fresh.push(row);
+      } else if (hasData && (cur.source === 'sheet' || cur.source === 'none')) {
+        // Belum pernah berhasil diambil otomatis: ikuti angka terbaru di sheet.
+        const patch = {};
+        for (const k of [...METRICS, 'posted_at']) if (l.sheet[k] !== null && l.sheet[k] !== cur[k] && !(k === 'posted_at' && cur[k] && Date.parse(cur[k]) === Date.parse(l.sheet[k]))) patch[k] = l.sheet[k];
+        if (Object.keys(patch).length || cur.source === 'none') patches.push([cur.id, { ...patch, source: 'sheet' }]);
+      }
+    }
+    for (let i = 0; i < fresh.length; i += 500) await DB.addContents(fresh.slice(i, i + 500));
+    for (let i = 0; i < patches.length; i += 10) await Promise.all(patches.slice(i, i + 10).map(([id, p]) => DB.updateContent(id, p)));
+    stats.added += fresh.length; stats.updated += patches.length;
+    if (!silent) toast(`Menyinkronkan Sheet… ${tab.tab}`);
+  }
+  await DB.setSetting('sheet_last_sync', stats);
+  if (stats.added) DB.kick();
+  return stats;
+}
+async function autoSync() {
+  const last = S.settings.sheet_last_sync?.at;
+  if (!LIVE || !S.settings.sheet?.url || (last && Date.now() - Date.parse(last) < 6 * 3600000)) return;
+  try { const s = await syncSheet(true); if (s && (s.added || s.brands)) { toast(`Sheet disinkronkan: ${s.added} link baru.`); render(); } }
+  catch (e) { console.warn('Sinkron sheet gagal', e); }
+}
+
 function downloadCsv(rows) {
   const head = ['Brand', 'Platform', 'Link', 'Judul', 'Tanggal posting', 'Views', 'Likes', 'Komentar', 'Shares', 'Saves', 'ER (%)', 'Sumber'];
   const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -602,9 +690,9 @@ function linksDialog() {
   async (fd) => {
     const { rows } = parseLinks(fd.get('links'), fd.get('brand'));
     if (!rows.length) { toast('Tidak ada link baru yang dikenali.'); return false; }
-    await DB.addContents(rows); await DB.kick();
+    await DB.addContents(rows); DB.kick();
     S.brandId = fd.get('brand');
-    toast(`${rows.length} link ditambahkan. Angkanya terisi setelah pengambilan data berikutnya.`);
+    toast(`${rows.length} link ditambahkan. Angkanya terisi otomatis dalam beberapa menit.`);
   });
   const upd = () => {
     const r = parseLinks($('textarea', d).value, $('select', d).value);
@@ -645,39 +733,72 @@ function contentDialog(c) {
   });
 }
 
-function settingsDialog() {
+async function settingsDialog() {
   const sh = S.settings.sheet || {}, ls = S.settings.sheet_last_sync, cs = S.settings.collector_status;
-  const line = (p) => (cs?.[p] ? `${PLAT[p]}: ${cs[p].ok} berhasil, ${cs[p].failed} gagal, ${cs[p].unavailable} tidak tersedia` : '');
-  dialog(`<h3>Google Sheets &amp; status pengambilan data</h3>
+  const priv = LIVE ? await DB.privateStatus() : {};
+  const team = LIVE ? await DB.getTeam() : [];
+  const me = LIVE ? (await DB.sb.auth.getUser()).data.user?.email || '' : '';
+  const line = (p) => (cs?.[p] ? `${PLAT[p]}: ${cs[p].ok} berhasil, ${cs[p].failed} gagal, ${cs[p].unavailable} tidak tersedia${cs[p].error ? ` — ${esc(cs[p].error)}` : ''}` : '');
+  dialog(`<h3>Google Sheets &amp; pengambilan data</h3>
     <label>Link Google Sheets (akses “Siapa saja yang memiliki link: Pelihat”)<input name="url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" value="${esc(sh.url)}"></label>
     <label>Tab yang dilewati (pisahkan dengan koma)<input name="skip" value="${esc((sh.exclude_tabs || ['Credential Brand', 'List Reporting']).join(', '))}"></label>
-    <div class="hint">Setiap tab lain dianggap satu brand. Semua link TikTok/Instagram/YouTube di dalamnya otomatis masuk dan disinkronkan ulang tiap ±6 jam.<br>
-      ${ls?.at ? `Sinkron terakhir ${ago(ls.at)}: ${ls.added} link baru, ${ls.brands} brand baru.` : 'Belum pernah disinkronkan.'}${ls?.error ? `<br><span style="color:var(--bad)">Gagal terakhir: ${esc(ls.error)}</span>` : ''}</div>
+    <div class="hint">Setiap tab lain dianggap satu brand; semua link TikTok/Instagram/YouTube di dalamnya otomatis masuk. Sinkron ulang berjalan saat dashboard dibuka (maks. tiap 6 jam) atau lewat tombol di bawah.<br>
+      ${ls?.at ? `Sinkron terakhir ${ago(ls.at)}: ${ls.added} link baru, ${ls.brands} brand baru, ${ls.updated} diperbarui.` : 'Belum pernah disinkronkan.'}</div>
+    <label>YouTube API key ${priv.youtube_api_key ? '(sudah diisi — kosongkan bila tidak ingin mengubah)' : '(belum diisi — tanpa ini YouTube sering gagal & komentar kosong)'}<input name="yt" type="password" autocomplete="off" placeholder="${priv.youtube_api_key ? '••••••••' : 'AIza…'}"></label>
+    <label>Sesi akun Instagram / cookie “sessionid” ${priv.ig_sessionid ? '(sudah diisi)' : '(belum diisi — tanpa ini Instagram tidak bisa diambil otomatis)'}<input name="ig" type="password" autocomplete="off" placeholder="${priv.ig_sessionid ? '••••••••' : ''}"></label>
+    <label>Anggota tim yang boleh membuka dashboard (satu email per baris). Tiap anggota membuat akunnya sendiri lewat “Buat akun” di halaman login.<textarea name="team" style="min-height:84px">${esc(team.join('\n'))}</textarea></label>
     <div class="hint"><b>Pengambilan data terakhir:</b> ${cs?.at ? `${ago(cs.at)} — ${cs.queued} konten diproses.<br>${['tiktok', 'instagram', 'youtube'].map(line).filter(Boolean).join('<br>')}` : 'belum ada catatan.'}</div>
-    ${FOOT()}`,
-  async (fd) => {
-    await DB.setSetting('sheet', { url: fd.get('url').trim(), exclude_tabs: fd.get('skip').split(',').map((s) => s.trim()).filter(Boolean), sync_requested: true });
-    await DB.kick();
-    toast('Tersimpan. Sheet disinkronkan pada pengambilan data berikutnya.');
+    <div class="foot"><span><button class="btn" value="sync">Simpan &amp; sinkronkan sekarang</button></span><span><button class="btn" value="cancel" formnovalidate>Batal</button> <button class="btn primary" value="save">Simpan</button></span></div>`,
+  async (fd, action) => {
+    if (!LIVE) { toast('Mode pratinjau: pengaturan tidak disimpan.'); return; }
+    await DB.setSetting('sheet', { url: fd.get('url').trim(), exclude_tabs: fd.get('skip').split(',').map((s) => s.trim()).filter(Boolean) });
+    if (fd.get('yt').trim()) await DB.setPrivate('youtube_api_key', fd.get('yt'));
+    if (fd.get('ig').trim()) await DB.setPrivate('ig_sessionid', fd.get('ig'));
+    await DB.setTeam(fd.get('team').split(/[\s,;]+/), me);
+    if (action === 'sync') {
+      if (!fd.get('url').trim()) { toast('Isi link Google Sheets terlebih dahulu.'); return false; }
+      toast('Mengunduh dan membaca Sheet…');
+      const st = await syncSheet();
+      toast(`Sinkron selesai: ${st.added} link baru, ${st.brands} brand baru, ${st.updated} diperbarui. Angka terbaru terisi bertahap.`);
+    } else toast('Pengaturan tersimpan.');
   });
 }
 
 // ---------------------------------------------------------------- boot
-function loginScreen(msg = '') {
+function loginScreen(msg = '', signup = false) {
   $('#root').innerHTML = `<div class="login"><form id="login"><div class="brandmark" style="padding:0"><b>XANDER CREATIVE</b><span>Content Performance</span></div>
     <label>Email<br><input name="email" type="email" required autocomplete="username" style="width:100%"></label>
-    <label>Kata sandi<br><input name="password" type="password" required autocomplete="current-password" style="width:100%"></label>
-    <button class="btn primary">Masuk</button><div class="sub" style="color:var(--bad)">${esc(msg)}</div></form></div>`;
+    <label>Kata sandi${signup ? ' (minimal 8 karakter)' : ''}<br><input name="password" type="password" required minlength="${signup ? 8 : 1}" autocomplete="${signup ? 'new-password' : 'current-password'}" style="width:100%"></label>
+    <button class="btn primary">${signup ? 'Buat akun' : 'Masuk'}</button>
+    <button type="button" class="btn ghost" id="swap">${signup ? 'Sudah punya akun? Masuk' : 'Belum punya akun? Buat akun'}</button>
+    <div class="sub" id="loginMsg">${esc(msg)}</div></form></div>`;
+  $('#swap').addEventListener('click', () => loginScreen('', !signup));
   $('#login').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const fd = new FormData(e.target);
-    const { error } = await DB.sb.auth.signInWithPassword({ email: fd.get('email'), password: fd.get('password') });
-    if (error) loginScreen('Email atau kata sandi salah.'); else start();
+    const fd = new FormData(e.target), cred = { email: fd.get('email').trim(), password: fd.get('password') };
+    $('#loginMsg').textContent = 'Memproses…';
+    if (signup) {
+      const { data, error } = await DB.sb.auth.signUp(cred);
+      if (error) return loginScreen(/registered|exists/i.test(error.message) ? 'Email ini sudah punya akun. Silakan masuk.' : 'Gagal membuat akun: ' + error.message, true);
+      if (data.session) return start();
+      return loginScreen('Akun dibuat. Buka email Anda dan klik link konfirmasi, lalu masuk di sini.');
+    }
+    const { error } = await DB.sb.auth.signInWithPassword(cred);
+    if (error) loginScreen(/confirm/i.test(error.message) ? 'Email belum dikonfirmasi. Klik link di email konfirmasi terlebih dahulu.' : 'Email atau kata sandi salah.');
+    else start();
   });
 }
 async function start() {
   $('#root').innerHTML = '<div class="empty">Memuat data…</div>';
-  try { Object.assign(S, await DB.load()); render(); }
+  try {
+    if (LIVE && !(await DB.isMember())) {
+      const email = (await DB.sb.auth.getUser()).data.user?.email;
+      $('#root').innerHTML = `<div class="empty">Email <b>${esc(email)}</b> belum terdaftar sebagai anggota tim.<br>Minta admin menambahkannya di menu “Google Sheets &amp; status”.<br><br><button class="btn" id="out">Keluar</button></div>`;
+      $('#out').onclick = async () => { await DB.sb.auth.signOut(); location.reload(); };
+      return;
+    }
+    Object.assign(S, await DB.load()); render(); autoSync();
+  }
   catch (e) { $('#root').innerHTML = `<div class="empty">Gagal memuat data: ${esc(e.message)}</div>`; }
 }
 (async () => {
@@ -687,6 +808,11 @@ async function start() {
     await start();
   } catch (e) { $('#root').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 })();
+// Muat ulang data tiap 3 menit agar angka mengikuti pengambilan data di latar belakang.
+setInterval(async () => {
+  if (!LIVE || !DB.sb || !S.brandMap || document.querySelector('dialog[open], #login') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+  try { Object.assign(S, await DB.load()); render(); } catch {}
+}, 180000);
 let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if ($('#chart')) renderChart(filtered()); }, 150); });
 </script>
 </body>

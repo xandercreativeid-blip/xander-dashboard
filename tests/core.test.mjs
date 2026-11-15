@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import '../../web/urls.js';
-import { nextFetch } from './run.js';
-import { parseSheetDate } from './sheet.js';
+import '../web/urls.js';
+import '../web/sheet.js';
 const { parseUrl } = globalThis.XUrls;
+const { parseSheetDate } = globalThis.XSheet;
 
 test('mengenali link tiap platform', () => {
   assert.deepEqual(parseUrl('https://www.tiktok.com/@high.gentlemen.id/video/7455474365472279813?is_from_webapp=1'),
@@ -16,15 +16,6 @@ test('mengenali link tiap platform', () => {
   assert.equal(parseUrl('https://l.instagram.com/?u=https%3A%2F%2Fyoutube.com%2Fshorts%2FT47Co-ZgvC0%3Fsi%3D9J').key, 'T47Co-ZgvC0');
   assert.equal(parseUrl('https://drive.google.com/file/d/abc'), null);
   assert.equal(parseUrl('https://www.tiktok.com/@akun'), null);
-});
-
-test('jadwal refresh mengikuti umur konten', () => {
-  const now = Date.UTC(2026, 10, 15), day = 86400000;
-  const gapH = (ageDays) => (new Date(nextFetch(new Date(now - ageDays * day).toISOString(), now)) - now) / 3600000;
-  assert.ok(gapH(2) >= 8 && gapH(2) < 9);
-  assert.ok(gapH(10) >= 24 && gapH(10) < 27);
-  assert.ok(gapH(45) >= 168 && gapH(45) < 185);
-  assert.ok(gapH(200) >= 720 && gapH(200) < 793);
 });
 
 test('tanggal di sheet', () => {
