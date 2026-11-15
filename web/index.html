@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Xander Performance</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f3ef; --surface: #fcfcfb; --surface-2: #efeee9; --line: #dfddd5;
+  --text: #0b0b0b; --text-2: #52514e; --text-3: #85837c;
+  --accent: #1d4fa8; --accent-ink: #ffffff;
+  --tiktok: #2a78d6; --instagram: #eb6834; --youtube: #1baf7a;
+  --good: #1b7a3d; --good-bg: #e2f2e6; --warn: #8a5a00; --warn-bg: #fbefd2; --bad: #b3261e; --bad-bg: #fbe4e2;
+  --shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #111110; --surface: #1a1a19; --surface-2: #242422; --line: #33322f;
+    --text: #f0efec; --text-2: #c3c2b7; --text-3: #8d8b83;
+    --accent: #7fa8ee; --accent-ink: #0b0b0b;
+    --tiktok: #3987e5; --instagram: #d95926; --youtube: #199e70;
+    --good: #6fd08c; --good-bg: #173322; --warn: #e6b34a; --warn-bg: #3a2e12; --bad: #f08a83; --bad-bg: #3d1c1a;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.4);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.num { font-variant-numeric: tabular-nums; }
+.app { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100%; }
+.side { background: var(--surface); border-right: 1px solid var(--line); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+.brandmark { padding: 18px 16px 12px; }
+.brandmark b { display: block; font-size: 15px; letter-spacing: .02em; }
+.brandmark span { color: var(--text-3); font-size: 12px; }
+.side input[type=search] { margin: 0 12px 8px; }
+.brandlist { overflow: auto; flex: 1; padding: 0 8px 8px; }
+.brandlist button { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; border: 0; background: none; padding: 7px 8px; border-radius: 6px; }
+.brandlist button:hover { background: var(--surface-2); }
+.brandlist button[aria-current=true] { background: var(--text); color: var(--surface); }
+.brandlist button small { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.brandlist button[aria-current=true] small { color: inherit; opacity: .7; }
+.brandlist .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidefoot { border-top: 1px solid var(--line); padding: 10px 12px; display: grid; gap: 6px; }
+.main { padding: 20px 24px 48px; min-width: 0; }
+.head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; justify-content: space-between; }
+h1 { font-size: 24px; margin: 0; letter-spacing: -.01em; }
+.sub { color: var(--text-2); font-size: 13px; margin-top: 2px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 7px 12px; border-radius: 7px; white-space: nowrap; }
+.btn:hover { border-color: var(--text-3); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.ghost { border-color: transparent; background: none; padding: 4px 6px; }
+.btn.danger { color: var(--bad); }
+.btn:disabled { opacity: .5; cursor: default; }
+input, select, textarea { background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; min-width: 0; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 11px; display: inline-flex; align-items: center; gap: 6px; }
+.chip[aria-pressed=false] { opacity: .55; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.tile .lab { color: var(--text-2); font-size: 12px; }
+.tile .val { font-size: 24px; font-weight: 650; letter-spacing: -.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tile .note { color: var(--text-3); font-size: 12px; min-height: 17px; }
+.tile.hero { border-color: var(--text); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-top: 14px; }
+.card > header { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; padding: 12px 14px 0; }
+.card h2 { font-size: 15px; margin: 0; }
+.card .body { padding: 12px 14px 14px; }
+.legend { display: flex; gap: 14px; color: var(--text-2); font-size: 12px; flex-wrap: wrap; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.chartwrap { position: relative; }
+svg text { fill: var(--text-3); font-size: 11px; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: 8px; padding: 8px 10px; font-size: 12px; min-width: 170px; z-index: 5; display: none; }
+.tip b { display: block; margin-bottom: 4px; }
+.tip div { display: flex; justify-content: space-between; gap: 14px; }
+.tip div span:first-child { display: inline-flex; align-items: center; gap: 5px; color: var(--text-2); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 8px 10px; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th { color: var(--text-2); font-weight: 600; font-size: 12px; border-top: 0; user-select: none; }
+th[data-sort] { cursor: pointer; }
+th[data-sort]:hover { color: var(--text); }
+th:first-child, td:first-child, th.l, td.l { text-align: left; }
+tbody tr:hover { background: var(--surface-2); }
+td.title { max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+td.title a { color: inherit; text-decoration: none; }
+td.title a:hover { text-decoration: underline; }
+tr.clickable { cursor: pointer; }
+.badge { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 11.5px; font-weight: 600; }
+.badge.good { background: var(--good-bg); color: var(--good); }
+.badge.warn { background: var(--warn-bg); color: var(--warn); }
+.badge.bad { background: var(--bad-bg); color: var(--bad); }
+.badge.mute { background: var(--surface-2); color: var(--text-2); }
+.pager { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; color: var(--text-2); font-size: 12.5px; gap: 8px; flex-wrap: wrap; }
+.empty { padding: 28px; text-align: center; color: var(--text-2); }
+dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); padding: 0; width: min(560px, calc(100vw - 32px)); box-shadow: var(--shadow); }
+dialog::backdrop { background: rgba(0,0,0,.45); }
+dialog form { padding: 18px; display: grid; gap: 12px; }
+dialog h3 { margin: 0; font-size: 17px; }
+dialog label { display: grid; gap: 4px; font-size: 12.5px; color: var(--text-2); }
+dialog .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+dialog .foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; }
+dialog .hint { font-size: 12.5px; color: var(--text-2); }
+textarea { min-height: 150px; resize: vertical; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+.toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--text); color: var(--surface); padding: 9px 14px; border-radius: 8px; box-shadow: var(--shadow); z-index: 50; max-width: calc(100vw - 32px); }
+.login { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.login form { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 24px; width: min(360px, 100%); display: grid; gap: 12px; }
+.banner { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; font-size: 13px; }
+.mobilebrand { display: none; }
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .side { display: none; }
+  .mobilebrand { display: block; width: 100%; margin-bottom: 12px; }
+  .main { padding: 16px 16px 40px; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="dialogs"></div>
+<script src="config.js"></script>
+<script src="demo-data.js"></script>
+<script src="urls.js"></script>
+<script>
+'use strict';
+const CFG = window.XANDER_CONFIG || {};
+const LIVE = !!(CFG.supabaseUrl && CFG.supabaseAnonKey);
+const PLAT = { tiktok: 'TikTok', instagram: 'Instagram', youtube: 'YouTube' };
+const METRICS = ['views', 'likes', 'comments', 'shares', 'saves'];
+const nf = new Intl.NumberFormat('id-ID');
+const cf = new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 });
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = (n) => (n === null || n === undefined ? '–' : nf.format(n));
+const pct = (x) => (x === null ? '–' : (x * 100).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%');
+const WIB = 7 * 3600000;
+const dayKey = (iso) => (iso ? new Date(Date.parse(iso) + WIB).toISOString().slice(0, 10) : null);
+const todayKey = () => dayKey(new Date().toISOString());
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+const monthLabel = (ym) => `${MONTH_NAMES[+ym.slice(5, 7) - 1]} ${ym.slice(0, 4)}`;
+const dateLabel = (key) => (key ? `${+key.slice(8, 10)} ${MONTH_NAMES[+key.slice(5, 7) - 1]} ${key.slice(0, 4)}` : '–');
+function ago(iso) {
+  if (!iso) return '';
+  const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
+  if (m < 60) return `${m} mnt lalu`;
+  if (m < 48 * 60) return `${Math.round(m / 60)} jam lalu`;
+  return `${Math.round(m / 1440)} hari lalu`;
+}
+function toast(msg) {
+  document.querySelectorAll('.toast').forEach((t) => t.remove());
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.append(t);
+  setTimeout(() => t.remove(), 4500);
+}
+
+// ---------------------------------------------------------------- data layer
+const DB = {
+  sb: null,
+  async init() {
+    if (!LIVE) return;
+    await new Promise((ok, fail) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
+      s.onload = ok; s.onerror = () => fail(new Error('Gagal memuat pustaka Supabase')); document.head.append(s);
+    });
+    this.sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey);
+  },
+  ok({ data, error }) { if (error) throw new Error(error.message); return data; },
+  async all(table) {
+    const out = [];
+    for (let from = 0; ; from += 1000) {
+      const page = this.ok(await this.sb.from(table).select('*').order('id').range(from, from + 999));
+      out.push(...page);
+      if (page.length < 1000) return out;
+    }
+  },
+  async load() {
+    if (!LIVE) {
+      const d = window.DEMO_DATA || { brands: [], contents: [], settings: {} };
+      return { brands: d.brands, contents: d.contents, settings: d.settings || {} };
+    }
+    const [brands, contents, rows] = await Promise.all([this.all('brands'), this.all('contents'), this.sb.from('settings').select('*').then((r) => this.ok(r))]);
+    return { brands, contents, settings: Object.fromEntries(rows.map((r) => [r.key, r.value])) };
+  },
+  async addBrand(row) {
+    if (!LIVE) { const b = { id: crypto.randomUUID(), ...row }; S.brands.push(b); return b; }
+    const b = this.ok(await this.sb.from('brands').insert(row).select().single()); S.brands.push(b); return b;
+  },
+  async updateBrand(id, patch) {
+    if (LIVE) this.ok(await this.sb.from('brands').update(patch).eq('id', id));
+    Object.assign(S.brands.find((b) => b.id === id), patch);
+  },
+  async deleteBrand(id) {
+    if (LIVE) this.ok(await this.sb.from('brands').delete().eq('id', id));
+    S.brands = S.brands.filter((b) => b.id !== id); S.contents = S.contents.filter((c) => c.brand_id !== id);
+  },
+  async addContents(rows) {
+    if (!LIVE) {
+      for (const r of rows) S.contents.push({ id: crypto.randomUUID(), aliases: [], title: null, posted_at: null, views: null, likes: null, comments: null, shares: null, saves: null, source: 'none', status: 'pending', fail_count: 0, created_at: new Date().toISOString(), ...r });
+      return;
+    }
+    const data = this.ok(await this.sb.from('contents').upsert(rows, { onConflict: 'brand_id,platform,external_id', ignoreDuplicates: true }).select());
+    S.contents.push(...data);
+  },
+  async updateContent(id, patch) {
+    if (LIVE) this.ok(await this.sb.from('contents').update(patch).eq('id', id));
+    Object.assign(S.contents.find((c) => c.id === id), patch);
+  },
+  async deleteContent(id) {
+    if (LIVE) this.ok(await this.sb.from('contents').delete().eq('id', id));
+    S.contents = S.contents.filter((c) => c.id !== id);
+  },
+  async requestRefresh(ids) {
+    const now = new Date().toISOString();
+    if (LIVE) {
+      for (let i = 0; i < ids.length; i += 200) this.ok(await this.sb.from('contents').update({ refresh_requested_at: now }).in('id', ids.slice(i, i + 200)));
+    }
+    const set = new Set(ids);
+    for (const c of S.contents) if (set.has(c.id)) c.refresh_requested_at = now;
+    return this.kick();
+  },
+  async kick() {
+    if (!LIVE) return 'demo';
+    try { return this.ok(await this.sb.rpc('trigger_collector')); } catch { return 'not_configured'; }
+  },
+  async setSetting(key, value) {
+    if (LIVE) this.ok(await this.sb.from('settings').upsert({ key, value }));
+    S.settings[key] = value;
+  },
+};
+
+// ---------------------------------------------------------------- state
+const S = {
+  brands: [], contents: [], settings: {},
+  brandId: 'all', brandSearch: '',
+  period: 'all', month: todayKey().slice(0, 7), from: '', to: '',
+  platforms: new Set(Object.keys(PLAT)),
+  sort: { key: 'posted_at', dir: -1 }, page: 0, q: '',
+};
+const targetOf = (c) => S.brandMap.get(c.brand_id)?.views_target ?? 10000;
+
+function periodRange() {
+  const t = todayKey(), y = +t.slice(0, 4), m = +t.slice(5, 7);
+  const shift = (days) => new Date(Date.parse(t + 'T00:00:00Z') - days * 86400000).toISOString().slice(0, 10);
+  const monthEnd = (ym) => { const [yy, mm] = ym.split('-').map(Number); return `${ym}-${String(new Date(Date.UTC(yy, mm, 0)).getUTCDate()).padStart(2, '0')}`; };
+  switch (S.period) {
+    case 'this': { const ym = t.slice(0, 7); return [ym + '-01', monthEnd(ym)]; }
+    case 'last': { const d = new Date(Date.UTC(y, m - 2, 1)); const ym = d.toISOString().slice(0, 7); return [ym + '-01', monthEnd(ym)]; }
+    case '30': return [shift(29), t];
+    case '90': return [shift(89), t];
+    case 'year': return [`${y}-01-01`, `${y}-12-31`];
+    case 'month': return S.month ? [S.month + '-01', monthEnd(S.month)] : null;
+    case 'range': return S.from || S.to ? [S.from || '0000-01-01', S.to || '9999-12-31'] : null;
+    default: return null;
+  }
+}
+function filtered() {
+  const range = periodRange();
+  return S.contents.filter((c) => {
+    if (S.brandId !== 'all' && c.brand_id !== S.brandId) return false;
+    if (!S.platforms.has(c.platform)) return false;
+    if (range) { const k = dayKey(c.posted_at); if (!k || k < range[0] || k > range[1]) return false; }
+    return true;
+  });
+}
+function summarize(list) {
+  const s = { n: list.length, views: 0, likes: 0, comments: 0, shares: 0, saves: 0, hit: 0, withData: 0 };
+  for (const c of list) {
+    for (const k of METRICS) s[k] += c[k] || 0;
+    if (c.views !== null && c.views !== undefined) { s.withData++; if (c.views >= targetOf(c)) s.hit++; }
+  }
+  s.er = s.views ? (s.likes + s.comments + s.shares + s.saves) / s.views : null;
+  return s;
+}
+const erOf = (c) => (c.views ? ((c.likes || 0) + (c.comments || 0) + (c.shares || 0) + (c.saves || 0)) / c.views : null);
+
+// ---------------------------------------------------------------- render
+function render() {
+  S.brandMap = new Map(S.brands.map((b) => [b.id, b]));
+  if (S.brandId !== 'all' && !S.brandMap.has(S.brandId)) S.brandId = 'all';
+  const brand = S.brandMap.get(S.brandId);
+  const list = filtered();
+  const sum = summarize(list);
+  const counts = new Map();
+  for (const c of S.contents) counts.set(c.brand_id, (counts.get(c.brand_id) || 0) + 1);
+  const brandsSorted = [...S.brands].sort((a, b) => a.name.localeCompare(b.name, 'id'));
+  const shown = brandsSorted.filter((b) => b.name.toLowerCase().includes(S.brandSearch.toLowerCase()));
+  const target = brand ? brand.views_target : null;
+  const range = periodRange();
+  const periodText = range ? `${dateLabel(range[0] === '0000-01-01' ? null : range[0])} – ${dateLabel(range[1] === '9999-12-31' ? null : range[1])}` : 'Semua waktu';
+  const cs = S.settings.collector_status;
+
+  $('#root').innerHTML = `
+  <div class="app">
+    <aside class="side">
+      <div class="brandmark"><b>XANDER CREATIVE</b><span>Content Performance</span></div>
+      <input type="search" id="brandSearch" placeholder="Cari brand…" value="${esc(S.brandSearch)}" aria-label="Cari brand">
+      <nav class="brandlist" aria-label="Brand">
+        <button data-brand="all" aria-current="${S.brandId === 'all'}"><span class="name">Semua Brand</span><small>${nf.format(S.contents.length)}</small></button>
+        ${shown.map((b) => `<button data-brand="${b.id}" aria-current="${S.brandId === b.id}"><span class="name">${esc(b.name)}</span><small>${nf.format(counts.get(b.id) || 0)}</small></button>`).join('')}
+      </nav>
+      <div class="sidefoot">
+        <button class="btn" id="addBrand">+ Brand baru</button>
+        <button class="btn" id="openSettings">Google Sheets &amp; status</button>
+        ${LIVE ? '<button class="btn ghost" id="logout">Keluar</button>' : ''}
+      </div>
+    </aside>
+    <main class="main">
+      ${LIVE ? '' : '<div class="banner">Mode pratinjau: data contoh dari Google Sheets Anda. Perubahan di sini tidak tersimpan.</div>'}
+      <select class="mobilebrand" id="mobileBrand" aria-label="Pilih brand">
+        <option value="all">Semua Brand</option>
+        ${brandsSorted.map((b) => `<option value="${b.id}" ${S.brandId === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}
+      </select>
+      <div class="head">
+        <div>
+          <h1>${esc(brand ? brand.name : 'Semua Brand')}</h1>
+          <div class="sub">${brand ? `Target views per konten: <b class="num">${nf.format(target)}</b>` : `${S.brands.length} brand · target views mengikuti setelan tiap brand`}${cs?.at ? ` · Data terakhir diambil ${ago(cs.at)}` : ''}</div>
+        </div>
+        <div class="actions">
+          ${brand ? '<button class="btn" id="editBrand">Atur brand</button>' : ''}
+          <button class="btn" id="refreshAll" ${list.length ? '' : 'disabled'}>↻ Refresh data</button>
+          <button class="btn primary" id="addLinks" ${S.brands.length ? '' : 'disabled'}>+ Tambah link</button>
+        </div>
+      </div>
+      <div class="filters">
+        <select id="period" aria-label="Periode">
+          ${[['all', 'Semua waktu'], ['this', 'Bulan ini'], ['last', 'Bulan lalu'], ['30', '30 hari terakhir'], ['90', '90 hari terakhir'], ['year', 'Tahun ini'], ['month', 'Pilih bulan…'], ['range', 'Rentang tanggal…']]
+            .map(([v, l]) => `<option value="${v}" ${S.period === v ? 'selected' : ''}>${l}</option>`).join('')}
+        </select>
+        ${S.period === 'month' ? `<input type="month" id="month" value="${S.month}" aria-label="Bulan">` : ''}
+        ${S.period === 'range' ? `<input type="date" id="from" value="${S.from}" aria-label="Dari tanggal"><span>s.d.</span><input type="date" id="to" value="${S.to}" aria-label="Sampai tanggal">` : ''}
+        <div class="chips" role="group" aria-label="Platform">
+          ${Object.entries(PLAT).map(([k, l]) => `<button class="chip" data-plat="${k}" aria-pressed="${S.platforms.has(k)}"><i class="dot" style="background:var(--${k})"></i>${l}</button>`).join('')}
+        </div>
+        <span class="sub">Tanggal posting: ${periodText}</span>
+      </div>
+      <div class="tiles">
+        ${tile('Total Views', sum.views, `${nf.format(sum.n)} konten`, true)}
+        ${tile('Likes', sum.likes)}
+        ${tile('Komentar', sum.comments)}
+        ${tile('Shares', sum.shares, 'IG & YouTube tidak publik')}
+        ${tile('Saves', sum.saves, 'IG & YouTube tidak publik')}
+        <div class="tile"><div class="lab">Engagement Rate</div><div class="val">${pct(sum.er)}</div><div class="note">interaksi ÷ views</div></div>
+        <div class="tile"><div class="lab">Konten ≥ ${brand ? cf.format(target) + ' views' : 'target views'}</div><div class="val">${nf.format(sum.hit)}<span style="font-size:14px;font-weight:500;color:var(--text-3)"> / ${nf.format(sum.withData)}</span></div><div class="note">${sum.withData ? pct(sum.hit / sum.withData) + ' dari konten berdata' : ''}</div></div>
+      </div>
+      <section class="card">
+        <header><h2>Views per bulan posting</h2><div class="legend">${Object.entries(PLAT).filter(([k]) => S.platforms.has(k)).map(([k, l]) => `<span><i class="dot" style="background:var(--${k})"></i>${l}</span>`).join('')}</div></header>
+        <div class="body"><div class="chartwrap" id="chart"></div></div>
+        <div class="scroll" id="monthly"></div>
+      </section>
+      ${S.brandId === 'all' ? '<section class="card"><header><h2>Perbandingan brand</h2></header><div class="scroll" id="brandTable" style="margin-top:8px"></div></section>' : ''}
+      <section class="card">
+        <header><h2>Daftar konten</h2><div class="actions"><input type="search" id="q" placeholder="Cari judul / link…" value="${esc(S.q)}" aria-label="Cari konten"><button class="btn" id="csv">Unduh CSV</button></div></header>
+        <div class="scroll" id="contentTable" style="margin-top:8px"></div>
+      </section>
+    </main>
+  </div>`;
+  renderChart(list); renderMonthly(list); if (S.brandId === 'all') renderBrandTable(list); renderContents(list);
+  bind(list);
+}
+function tile(label, value, note = '', hero = false) {
+  return `<div class="tile${hero ? ' hero' : ''}"><div class="lab">${label}</div><div class="val" title="${nf.format(value)}">${value >= 100000 ? cf.format(value) : nf.format(value)}</div><div class="note">${note}</div></div>`;
+}
+
+function byMonth(list) {
+  const map = new Map();
+  for (const c of list) {
+    const k = dayKey(c.posted_at); if (!k) continue;
+    const ym = k.slice(0, 7);
+    if (!map.has(ym)) map.set(ym, { ym, items: [], tiktok: 0, instagram: 0, youtube: 0 });
+    const m = map.get(ym); m.items.push(c); m[c.platform] += c.views || 0;
+  }
+  const keys = [...map.keys()].sort();
+  if (!keys.length) return [];
+  const out = [];
+  let [y, m] = keys[0].split('-').map(Number);
+  const last = keys[keys.length - 1];
+  for (;;) {
+    const ym = `${y}-${String(m).padStart(2, '0')}`;
+    out.push(map.get(ym) || { ym, items: [], tiktok: 0, instagram: 0, youtube: 0 });
+    if (ym === last) break;
+    if (++m > 12) { m = 1; y++; }
+  }
+  return out;
+}
+
+function renderChart(list) {
+  const el = $('#chart');
+  let months = byMonth(list);
+  if (!months.length) { el.innerHTML = '<div class="empty">Belum ada konten bertanggal pada filter ini.</div>'; return; }
+  if (months.length > 36) months = months.slice(-36);
+  const W = Math.max(320, el.clientWidth), H = 240, padL = 44, padB = 24, padT = 8;
+  const plats = Object.keys(PLAT).filter((p) => S.platforms.has(p));
+  const max = Math.max(1, ...months.map((m) => plats.reduce((a, p) => a + m[p], 0)));
+  const step = niceStep(max / 4), top = Math.ceil(max / step) * step;
+  const plotW = W - padL - 6, plotH = H - padB - padT;
+  const slot = plotW / months.length, bw = Math.max(4, Math.min(44, slot - 6));
+  const y = (v) => padT + plotH - (v / top) * plotH;
+  let g = '';
+  for (let v = 0; v <= top + 1e-9; v += step) g += `<line x1="${padL}" x2="${W - 6}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${padL - 6}" y="${y(v) + 4}" text-anchor="end">${cf.format(v)}</text>`;
+  const every = Math.ceil(months.length / Math.max(1, Math.floor(plotW / 62)));
+  months.forEach((m, i) => {
+    const x = padL + i * slot + (slot - bw) / 2;
+    let acc = 0;
+    const segs = plats.filter((p) => m[p] > 0);
+    segs.forEach((p, si) => {
+      const y0 = y(acc), y1 = y(acc + m[p]); acc += m[p];
+      const h = Math.max(1, y0 - y1 - (si < segs.length - 1 ? 2 : 0));
+      const yy = y0 - h, r = si === segs.length - 1 ? Math.min(4, h, bw / 2) : 0;
+      g += `<path d="M${x},${yy + h}V${yy + r}Q${x},${yy} ${x + r},${yy}H${x + bw - r}Q${x + bw},${yy} ${x + bw},${yy + r}V${yy + h}Z" fill="var(--${p})"/>`;
+    });
+    if (i % every === 0) g += `<text x="${x + bw / 2}" y="${H - 7}" text-anchor="middle">${MONTH_NAMES[+m.ym.slice(5, 7) - 1]} ${m.ym.slice(2, 4)}</text>`;
+    g += `<rect data-i="${i}" x="${padL + i * slot}" y="${padT}" width="${slot}" height="${plotH}" fill="transparent"/>`;
+  });
+  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Views per bulan posting, rincian ada di tabel di bawah">${g}</svg><div class="tip"></div>`;
+  const tip = $('.tip', el);
+  el.querySelectorAll('rect[data-i]').forEach((r) => {
+    r.addEventListener('mousemove', (e) => {
+      const m = months[+r.dataset.i], s = summarize(m.items);
+      tip.innerHTML = `<b>${monthLabel(m.ym)}</b>${plats.map((p) => `<div><span><i class="dot" style="background:var(--${p})"></i>${PLAT[p]}</span><span class="num">${nf.format(m[p])}</span></div>`).join('')}<div><span>Total views</span><b class="num" style="margin:0">${nf.format(s.views)}</b></div><div><span>Konten</span><span class="num">${s.n}</span></div><div><span>≥ target</span><span class="num">${s.hit}</span></div>`;
+      tip.style.display = 'block';
+      const box = el.getBoundingClientRect();
+      let left = e.clientX - box.left + 14; if (left + tip.offsetWidth > box.width) left = e.clientX - box.left - tip.offsetWidth - 14;
+      tip.style.left = Math.max(0, left) + 'px'; tip.style.top = Math.max(0, e.clientY - box.top - 20) + 'px';
+    });
+    r.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+  });
+}
+function niceStep(raw) {
+  const p = 10 ** Math.floor(Math.log10(Math.max(raw, 1))), f = raw / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
+}
+const sumCells = (s) => `<td class="num">${nf.format(s.n)}</td><td class="num">${nf.format(s.views)}</td><td class="num">${nf.format(s.likes)}</td><td class="num">${nf.format(s.comments)}</td><td class="num">${nf.format(s.shares)}</td><td class="num">${nf.format(s.saves)}</td><td class="num">${pct(s.er)}</td><td class="num">${nf.format(s.hit)} <span style="color:var(--text-3)">(${s.withData ? Math.round((s.hit / s.withData) * 100) : 0}%)</span></td>`;
+const SUM_HEAD = '<th>Konten</th><th>Views</th><th>Likes</th><th>Komentar</th><th>Shares</th><th>Saves</th><th>ER</th><th>≥ Target</th>';
+
+function renderMonthly(list) {
+  const months = byMonth(list).filter((m) => m.items.length).reverse();
+  const undated = list.filter((c) => !c.posted_at);
+  if (!months.length && !undated.length) { $('#monthly').innerHTML = ''; return; }
+  $('#monthly').innerHTML = `<table><thead><tr><th>Bulan posting</th>${SUM_HEAD}</tr></thead><tbody>
+    ${months.map((m) => `<tr class="clickable" data-month="${m.ym}" title="Tampilkan bulan ini saja"><td>${monthLabel(m.ym)}</td>${sumCells(summarize(m.items))}</tr>`).join('')}
+    ${undated.length ? `<tr><td>Tanggal belum diketahui</td>${sumCells(summarize(undated))}</tr>` : ''}
+  </tbody></table>`;
+}
+function renderBrandTable(list) {
+  const rows = S.brands.map((b) => ({ b, s: summarize(list.filter((c) => c.brand_id === b.id)) })).sort((a, z) => z.s.views - a.s.views);
+  $('#brandTable').innerHTML = `<table><thead><tr><th>Brand</th>${SUM_HEAD}</tr></thead><tbody>
+    ${rows.map(({ b, s }) => `<tr class="clickable" data-brand="${b.id}"><td>${esc(b.name)}</td>${sumCells(s)}</tr>`).join('')}</tbody></table>`;
+}
+
+function statusBadge(c) {
+  if (c.refresh_requested_at) return '<span class="badge warn">Menunggu refresh</span>';
+  if (c.status === 'unavailable') return `<span class="badge bad" title="${esc(c.last_error)}">Tidak tersedia</span>`;
+  if (c.source === 'auto') return `<span class="badge good" title="${c.last_error ? 'Percobaan terakhir gagal: ' + esc(c.last_error) : 'Diambil otomatis'}">Live</span> <span style="color:var(--text-3)">${ago(c.last_fetched_at)}</span>`;
+  if (c.source === 'sheet') return `<span class="badge mute" title="${esc(c.last_error || 'Angka dari Google Sheets, belum bisa diambil otomatis')}">Dari Sheet</span>`;
+  if (c.source === 'manual') return '<span class="badge mute">Manual</span>';
+  if (c.status === 'error') return `<span class="badge bad" title="${esc(c.last_error)}">Gagal diambil</span>`;
+  return '<span class="badge warn">Antre</span>';
+}
+const COLS = [['platform', 'Platform'], ['title', 'Konten'], ['posted_at', 'Tgl posting'], ['views', 'Views'], ['likes', 'Likes'], ['comments', 'Komentar'], ['shares', 'Shares'], ['saves', 'Saves'], ['er', 'ER']];
+function sortedContents(list) {
+  const q = S.q.trim().toLowerCase();
+  let rows = q ? list.filter((c) => (c.title || '').toLowerCase().includes(q) || c.url.toLowerCase().includes(q)) : list.slice();
+  const { key, dir } = S.sort;
+  const val = (c) => (key === 'er' ? erOf(c) : key === 'brand' ? S.brandMap.get(c.brand_id)?.name : c[key]);
+  rows.sort((a, b) => {
+    const x = val(a), y = val(b);
+    if (x === y) return 0;
+    if (x === null || x === undefined) return 1;
+    if (y === null || y === undefined) return -1;
+    return (x < y ? -1 : 1) * dir;
+  });
+  return rows;
+}
+function renderContents(list) {
+  const rows = sortedContents(list), all = S.brandId === 'all', per = 50;
+  const pages = Math.max(1, Math.ceil(rows.length / per));
+  S.page = Math.min(S.page, pages - 1);
+  const slice = rows.slice(S.page * per, S.page * per + per);
+  const cols = all ? [['brand', 'Brand'], ...COLS] : COLS;
+  const arrow = (k) => (S.sort.key === k ? (S.sort.dir > 0 ? ' ↑' : ' ↓') : '');
+  if (!rows.length) { $('#contentTable').innerHTML = '<div class="empty">Belum ada konten pada filter ini. Klik “+ Tambah link” untuk memasukkan link konten.</div>'; return; }
+  $('#contentTable').innerHTML = `<table><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}" class="${['brand', 'platform', 'title', 'posted_at'].includes(k) ? 'l' : ''}">${l}${arrow(k)}</th>`).join('')}<th class="l">Status</th><th></th></tr></thead><tbody>
+    ${slice.map((c) => `<tr>
+      ${all ? `<td class="l">${esc(S.brandMap.get(c.brand_id)?.name)}</td>` : ''}
+      <td class="l"><i class="dot" style="background:var(--${c.platform})"></i> ${PLAT[c.platform]}</td>
+      <td class="l title"><a href="${esc(c.url)}" target="_blank" rel="noopener" title="${esc(c.title || c.url)}">${esc(c.title || c.url.replace(/^https:\/\/(www\.)?/, ''))}</a></td>
+      <td class="l num">${dateLabel(dayKey(c.posted_at))}</td>
+      <td class="num">${fmt(c.views)}${c.views !== null && c.views >= targetOf(c) ? ' <span class="badge good" title="Mencapai target views">✓</span>' : ''}</td>
+      <td class="num">${fmt(c.likes)}</td><td class="num">${fmt(c.comments)}</td><td class="num">${fmt(c.shares)}</td><td class="num">${fmt(c.saves)}</td>
+      <td class="num">${pct(erOf(c))}</td>
+      <td class="l">${statusBadge(c)}</td>
+      <td><button class="btn ghost" data-act="refresh" data-id="${c.id}" title="Refresh konten ini" aria-label="Refresh">↻</button><button class="btn ghost" data-act="edit" data-id="${c.id}" title="Isi / ubah angka manual" aria-label="Ubah">✎</button></td>
+    </tr>`).join('')}</tbody></table>
+    <div class="pager"><span>${nf.format(rows.length)} konten · halaman ${S.page + 1} dari ${pages}</span><span><button class="btn" id="prev" ${S.page ? '' : 'disabled'}>‹ Sebelumnya</button> <button class="btn" id="next" ${S.page < pages - 1 ? '' : 'disabled'}>Berikutnya ›</button></span></div>`;
+}
+
+// ---------------------------------------------------------------- events
+function bind(list) {
+  const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
+  document.querySelectorAll('[data-brand]').forEach((b) => b.addEventListener('click', () => { S.brandId = b.dataset.brand; S.page = 0; render(); window.scrollTo(0, 0); }));
+  on('#mobileBrand', 'change', (e) => { S.brandId = e.target.value; S.page = 0; render(); });
+  on('#brandSearch', 'input', (e) => { S.brandSearch = e.target.value; render(); const i = $('#brandSearch'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); });
+  on('#period', 'change', (e) => { S.period = e.target.value; S.page = 0; render(); });
+  on('#month', 'change', (e) => { S.month = e.target.value; S.page = 0; render(); });
+  on('#from', 'change', (e) => { S.from = e.target.value; S.page = 0; render(); });
+  on('#to', 'change', (e) => { S.to = e.target.value; S.page = 0; render(); });
+  document.querySelectorAll('[data-plat]').forEach((b) => b.addEventListener('click', () => {
+    const p = b.dataset.plat; S.platforms.has(p) ? S.platforms.delete(p) : S.platforms.add(p);
+    if (!S.platforms.size) S.platforms = new Set(Object.keys(PLAT));
+    S.page = 0; render();
+  }));
+  document.querySelectorAll('[data-month]').forEach((r) => r.addEventListener('click', () => { S.period = 'month'; S.month = r.dataset.month; S.page = 0; render(); }));
+  on('#q', 'input', (e) => { S.q = e.target.value; S.page = 0; renderContents(list); bindTable(list); });
+  on('#csv', 'click', () => downloadCsv(sortedContents(list)));
+  on('#addBrand', 'click', () => brandDialog(null));
+  on('#editBrand', 'click', () => brandDialog(S.brandMap.get(S.brandId)));
+  on('#addLinks', 'click', linksDialog);
+  on('#openSettings', 'click', settingsDialog);
+  on('#logout', 'click', async () => { await DB.sb.auth.signOut(); location.reload(); });
+  on('#refreshAll', 'click', async () => {
+    const ids = list.filter((c) => c.status !== 'unavailable').map((c) => c.id);
+    if (ids.length > 300 && !confirm(`Refresh ${nf.format(ids.length)} konten? Ini bisa memakan waktu beberapa putaran pengambilan data.`)) return;
+    await doRefresh(ids);
+  });
+  bindTable(list);
+}
+function bindTable(list) {
+  const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
+  on('#prev', () => { S.page--; renderContents(list); bindTable(list); });
+  on('#next', () => { S.page++; renderContents(list); bindTable(list); });
+  document.querySelectorAll('#contentTable th[data-sort]').forEach((th) => (th.onclick = () => {
+    const k = th.dataset.sort; S.sort = S.sort.key === k ? { key: k, dir: -S.sort.dir } : { key: k, dir: ['brand', 'platform', 'title'].includes(k) ? 1 : -1 };
+    renderContents(list); bindTable(list);
+  }));
+  document.querySelectorAll('[data-act]').forEach((b) => (b.onclick = () => {
+    const c = S.contents.find((x) => x.id === b.dataset.id);
+    if (b.dataset.act === 'refresh') doRefresh([c.id]); else contentDialog(c);
+  }));
+}
+async function doRefresh(ids) {
+  try {
+    const r = await DB.requestRefresh(ids);
+    toast(r === 'demo' ? 'Mode pratinjau: refresh tidak dijalankan.' : r === 'triggered' ? `Refresh ${ids.length} konten dimulai. Muat ulang halaman 1–2 menit lagi.` : `Refresh ${ids.length} konten dicatat, diproses pada jadwal pengambilan berikutnya.`);
+    render();
+  } catch (e) { toast('Gagal: ' + e.message); }
+}
+function downloadCsv(rows) {
+  const head = ['Brand', 'Platform', 'Link', 'Judul', 'Tanggal posting', 'Views', 'Likes', 'Komentar', 'Shares', 'Saves', 'ER (%)', 'Sumber'];
+  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = rows.map((c) => [S.brandMap.get(c.brand_id)?.name, PLAT[c.platform], c.url, c.title, dayKey(c.posted_at), c.views, c.likes, c.comments, c.shares, c.saves, erOf(c) === null ? '' : (erOf(c) * 100).toFixed(2), c.source].map(q).join(','));
+  const blob = new Blob(['﻿' + [head.map(q).join(','), ...lines].join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `konten-${todayKey()}.csv`; a.click();
+}
+
+// ---------------------------------------------------------------- dialogs
+function dialog(html, onSubmit) {
+  const d = document.createElement('dialog');
+  d.innerHTML = `<form method="dialog">${html}</form>`;
+  $('#dialogs').append(d);
+  d.addEventListener('close', () => d.remove());
+  const form = $('form', d);
+  form.addEventListener('submit', async (e) => {
+    if (e.submitter?.value === 'cancel') return;
+    e.preventDefault();
+    try { if ((await onSubmit(new FormData(form), e.submitter?.value, d)) !== false) { d.close(); render(); } }
+    catch (err) { toast('Gagal: ' + err.message); }
+  });
+  d.showModal();
+  return d;
+}
+const FOOT = (extra = '') => `<div class="foot"><span>${extra}</span><span><button class="btn" value="cancel" formnovalidate>Batal</button> <button class="btn primary" value="save">Simpan</button></span></div>`;
+
+function brandDialog(b) {
+  dialog(`<h3>${b ? 'Atur brand' : 'Brand baru'}</h3>
+    <label>Nama brand<input name="name" required value="${esc(b?.name)}"></label>
+    <label>Target views per konten<input name="target" type="number" min="1" step="1" required value="${b?.views_target ?? 10000}"></label>
+    <label>Nama tab di Google Sheets (opsional, jika beda dari nama brand)<input name="tab" value="${esc(b?.sheet_tab)}"></label>
+    ${FOOT(b ? '<button class="btn danger" value="delete" formnovalidate>Hapus brand</button>' : '')}`,
+  async (fd, action) => {
+    if (action === 'delete') {
+      if (!confirm(`Hapus brand "${b.name}" beserta semua kontennya? Tindakan ini tidak bisa dibatalkan.`)) return false;
+      await DB.deleteBrand(b.id); S.brandId = 'all'; return;
+    }
+    const row = { name: fd.get('name').trim(), views_target: Math.max(1, Math.round(+fd.get('target'))), sheet_tab: fd.get('tab').trim() || null };
+    if (b) await DB.updateBrand(b.id, row); else S.brandId = (await DB.addBrand(row)).id;
+  });
+}
+
+function linksDialog() {
+  const d = dialog(`<h3>Tambah link konten</h3>
+    <label>Brand<select name="brand">${[...S.brands].sort((a, b) => a.name.localeCompare(b.name)).map((b) => `<option value="${b.id}" ${b.id === S.brandId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
+    <label>Link TikTok, Instagram Reels, atau YouTube Shorts — satu atau banyak sekaligus (satu per baris)<textarea name="links" placeholder="https://www.tiktok.com/@akun/video/…&#10;https://www.instagram.com/reel/…&#10;https://www.youtube.com/shorts/…" required></textarea></label>
+    <div class="hint" id="linkInfo">Platform dan tanggal posting dikenali otomatis.</div>
+    ${FOOT()}`,
+  async (fd) => {
+    const { rows } = parseLinks(fd.get('links'), fd.get('brand'));
+    if (!rows.length) { toast('Tidak ada link baru yang dikenali.'); return false; }
+    await DB.addContents(rows); await DB.kick();
+    S.brandId = fd.get('brand');
+    toast(`${rows.length} link ditambahkan. Angkanya terisi setelah pengambilan data berikutnya.`);
+  });
+  const upd = () => {
+    const r = parseLinks($('textarea', d).value, $('select', d).value);
+    const per = Object.entries(PLAT).map(([k, l]) => [l, r.rows.filter((x) => x.platform === k).length]).filter((x) => x[1]).map(([l, n]) => `${n} ${l}`).join(', ');
+    $('#linkInfo', d).textContent = `${r.rows.length} link baru${per ? ` (${per})` : ''}` + (r.dup ? ` · ${r.dup} sudah ada` : '') + (r.bad ? ` · ${r.bad} baris tidak dikenali` : '');
+  };
+  $('textarea', d).addEventListener('input', upd); $('select', d).addEventListener('change', upd);
+}
+function parseLinks(text, brandId) {
+  const have = new Set();
+  for (const c of S.contents) if (c.brand_id === brandId) { have.add(c.platform + ':' + c.external_id); for (const a of c.aliases || []) have.add(c.platform + ':' + a); }
+  const rows = []; let dup = 0, bad = 0;
+  for (const line of String(text).split(/[\s,]+/).filter(Boolean)) {
+    const p = XUrls.parseUrl(line);
+    if (!p) { bad++; continue; }
+    const k = p.platform + ':' + p.key;
+    if (have.has(k)) { dup++; continue; }
+    have.add(k); rows.push({ brand_id: brandId, platform: p.platform, external_id: p.key, url: p.url });
+  }
+  return { rows, dup, bad };
+}
+
+function contentDialog(c) {
+  const f = (k, l) => `<label>${l}<input name="${k}" type="number" min="0" step="1" value="${c[k] ?? ''}"></label>`;
+  dialog(`<h3>Ubah data konten</h3>
+    <div class="hint"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.url)}</a><br>Isi manual dipakai bila data tidak bisa diambil otomatis (mis. Instagram, atau shares/saves dari Insights). Jika pengambilan otomatis berhasil, angka yang tersedia publik akan menimpa isian ini.</div>
+    <label>Tanggal posting<input name="posted" type="date" value="${dayKey(c.posted_at) || ''}"></label>
+    <div class="row">${f('views', 'Views')}${f('likes', 'Likes')}${f('comments', 'Komentar')}${f('shares', 'Shares')}${f('saves', 'Saves')}</div>
+    ${FOOT('<button class="btn danger" value="delete" formnovalidate>Hapus konten</button>')}`,
+  async (fd, action) => {
+    if (action === 'delete') { if (!confirm('Hapus konten ini dari dashboard?')) return false; await DB.deleteContent(c.id); return; }
+    const patch = {};
+    for (const k of METRICS) { const v = fd.get(k); patch[k] = v === '' ? null : Math.max(0, Math.round(+v)); }
+    patch.posted_at = fd.get('posted') ? new Date(fd.get('posted') + 'T05:00:00Z').toISOString() : null;
+    const changed = METRICS.some((k) => patch[k] !== c[k]);
+    if (changed) patch.source = 'manual';
+    await DB.updateContent(c.id, patch);
+  });
+}
+
+function settingsDialog() {
+  const sh = S.settings.sheet || {}, ls = S.settings.sheet_last_sync, cs = S.settings.collector_status;
+  const line = (p) => (cs?.[p] ? `${PLAT[p]}: ${cs[p].ok} berhasil, ${cs[p].failed} gagal, ${cs[p].unavailable} tidak tersedia` : '');
+  dialog(`<h3>Google Sheets &amp; status pengambilan data</h3>
+    <label>Link Google Sheets (akses “Siapa saja yang memiliki link: Pelihat”)<input name="url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" value="${esc(sh.url)}"></label>
+    <label>Tab yang dilewati (pisahkan dengan koma)<input name="skip" value="${esc((sh.exclude_tabs || ['Credential Brand', 'List Reporting']).join(', '))}"></label>
+    <div class="hint">Setiap tab lain dianggap satu brand. Semua link TikTok/Instagram/YouTube di dalamnya otomatis masuk dan disinkronkan ulang tiap ±6 jam.<br>
+      ${ls?.at ? `Sinkron terakhir ${ago(ls.at)}: ${ls.added} link baru, ${ls.brands} brand baru.` : 'Belum pernah disinkronkan.'}${ls?.error ? `<br><span style="color:var(--bad)">Gagal terakhir: ${esc(ls.error)}</span>` : ''}</div>
+    <div class="hint"><b>Pengambilan data terakhir:</b> ${cs?.at ? `${ago(cs.at)} — ${cs.queued} konten diproses.<br>${['tiktok', 'instagram', 'youtube'].map(line).filter(Boolean).join('<br>')}` : 'belum ada catatan.'}</div>
+    ${FOOT()}`,
+  async (fd) => {
+    await DB.setSetting('sheet', { url: fd.get('url').trim(), exclude_tabs: fd.get('skip').split(',').map((s) => s.trim()).filter(Boolean), sync_requested: true });
+    await DB.kick();
+    toast('Tersimpan. Sheet disinkronkan pada pengambilan data berikutnya.');
+  });
+}
+
+// ---------------------------------------------------------------- boot
+function loginScreen(msg = '') {
+  $('#root').innerHTML = `<div class="login"><form id="login"><div class="brandmark" style="padding:0"><b>XANDER CREATIVE</b><span>Content Performance</span></div>
+    <label>Email<br><input name="email" type="email" required autocomplete="username" style="width:100%"></label>
+    <label>Kata sandi<br><input name="password" type="password" required autocomplete="current-password" style="width:100%"></label>
+    <button class="btn primary">Masuk</button><div class="sub" style="color:var(--bad)">${esc(msg)}</div></form></div>`;
+  $('#login').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const { error } = await DB.sb.auth.signInWithPassword({ email: fd.get('email'), password: fd.get('password') });
+    if (error) loginScreen('Email atau kata sandi salah.'); else start();
+  });
+}
+async function start() {
+  $('#root').innerHTML = '<div class="empty">Memuat data…</div>';
+  try { Object.assign(S, await DB.load()); render(); }
+  catch (e) { $('#root').innerHTML = `<div class="empty">Gagal memuat data: ${esc(e.message)}</div>`; }
+}
+(async () => {
+  try {
+    await DB.init();
+    if (LIVE) { const { data } = await DB.sb.auth.getSession(); if (!data.session) return loginScreen(); }
+    await start();
+  } catch (e) { $('#root').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+})();
+let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if ($('#chart')) renderChart(filtered()); }, 150); });
+</script>
+</body>
+</html>

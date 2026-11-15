@@ -1,0 +1,31 @@
+name: Ambil data konten
+on:
+  schedule:
+    - cron: '17 */2 * * *'        # tiap 2 jam
+  repository_dispatch:
+    types: [refresh]              # dipicu tombol Refresh di dashboard
+  workflow_dispatch:
+concurrency:
+  group: collect
+  cancel-in-progress: false
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: collector/package-lock.json
+      - run: npm ci
+        working-directory: collector
+      - run: node src/run.js
+        working-directory: collector
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          IG_SESSIONID: ${{ secrets.IG_SESSIONID }}
+          MAX_MINUTES: 12
