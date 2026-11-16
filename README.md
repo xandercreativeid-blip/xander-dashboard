@@ -11,6 +11,7 @@ per brand, sepanjang waktu, per bulan posting, atau rentang tanggal bebas.
 | Dashboard (halaman web) | `web/` | GitHub Pages (terbit otomatis tiap ada perubahan di `web/`) |
 | Database, login, daftar anggota tim | `supabase/schema.sql` | Supabase |
 | Pengambil data | `supabase/functions/collect/` | Supabase Edge Function, dipanggil tiap 5 menit + saat tombol ↻ ditekan |
+| Sinkron Google Sheets | `supabase/functions/sync-sheet/` | Supabase Edge Function, tiap 3 menit memeriksa 5 tab bergiliran; link baru otomatis masuk |
 
 ## Data yang bisa diambil dari link publik
 

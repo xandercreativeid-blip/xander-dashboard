@@ -628,6 +628,7 @@ async function syncSheet(silent = false) {
     stats.added += fresh.length; stats.updated += patches.length;
     if (!silent) toast(`Menyinkronkan Sheet… ${tab.tab}`);
   }
+  stats.last_added_at = stats.added ? stats.at : S.settings.sheet_last_sync?.last_added_at || null;
   await DB.setSetting('sheet_last_sync', stats);
   if (stats.added) DB.kick();
   return stats;
@@ -742,8 +743,8 @@ async function settingsDialog() {
   dialog(`<h3>Google Sheets &amp; pengambilan data</h3>
     <label>Link Google Sheets (akses “Siapa saja yang memiliki link: Pelihat”)<input name="url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" value="${esc(sh.url)}"></label>
     <label>Tab yang dilewati (pisahkan dengan koma)<input name="skip" value="${esc((sh.exclude_tabs || ['Credential Brand', 'List Reporting']).join(', '))}"></label>
-    <div class="hint">Setiap tab lain dianggap satu brand; semua link TikTok/Instagram/YouTube di dalamnya otomatis masuk. Sinkron ulang berjalan saat dashboard dibuka (maks. tiap 6 jam) atau lewat tombol di bawah.<br>
-      ${ls?.at ? `Sinkron terakhir ${ago(ls.at)}: ${ls.added} link baru, ${ls.brands} brand baru, ${ls.updated} diperbarui.` : 'Belum pernah disinkronkan.'}</div>
+    <div class="hint">Setiap tab lain dianggap satu brand. Link baru di Sheet masuk ke dashboard secara otomatis, biasanya dalam 15 menit (tab diperiksa bergiliran); tombol “Simpan &amp; sinkronkan sekarang” memeriksa semuanya saat itu juga.<br>
+      ${ls?.at ? `Pemeriksaan terakhir ${ago(ls.at)}${ls.last_added_at ? ` · link baru terakhir masuk ${ago(ls.last_added_at)}` : ''}.` : 'Belum pernah disinkronkan.'}${S.settings.sheet_sync_error ? `<br><span style="color:var(--bad)">Sinkron otomatis gagal ${ago(S.settings.sheet_sync_error.at)}: ${esc(S.settings.sheet_sync_error.error)}</span>` : ''}</div>
     <label>YouTube API key ${priv.youtube_api_key ? '(sudah diisi — kosongkan bila tidak ingin mengubah)' : '(belum diisi — tanpa ini YouTube sering gagal & komentar kosong)'}<input name="yt" type="password" autocomplete="off" placeholder="${priv.youtube_api_key ? '••••••••' : 'AIza…'}"></label>
     <label>Sesi akun Instagram / cookie “sessionid” ${priv.ig_sessionid ? '(sudah diisi)' : '(belum diisi — tanpa ini Instagram tidak bisa diambil otomatis)'}<input name="ig" type="password" autocomplete="off" placeholder="${priv.ig_sessionid ? '••••••••' : ''}"></label>
     <label>Anggota tim yang boleh membuka dashboard (satu email per baris). Tiap anggota membuat akunnya sendiri lewat “Buat akun” di halaman login.<textarea name="team" style="min-height:84px">${esc(team.join('\n'))}</textarea></label>
