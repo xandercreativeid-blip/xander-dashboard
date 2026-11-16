@@ -12,6 +12,8 @@ const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SE
 const METRICS = ["views", "likes", "comments", "shares", "saves"];
 const norm = (t: any) => String(t || "").trim().toLowerCase();
 const TABS_PER_RUN = 5;
+// Angka yang tidak bisa diambil dari halaman publik, jadi boleh diisi dari sheet walau konten sudah "Live".
+const GAP: any = { tiktok: [], youtube: ["shares", "saves"], instagram: ["shares", "saves"] };
 
 async function all(build: () => any) {
   const out: any[] = [];
@@ -64,11 +66,15 @@ async function sync() {
         fresh.push(hasData
           ? { ...base, views: l.sheet.views, likes: l.sheet.likes, comments: l.sheet.comments, shares: l.sheet.shares, saves: l.sheet.saves, source: "sheet" }
           : { ...base, views: null, likes: null, comments: null, shares: null, saves: null, source: "none" });
-      } else if (hasData && (cur.source === "sheet" || cur.source === "none")) {
+      } else if (hasData && cur.source !== "manual") {
+        // Belum pernah terambil otomatis: ikuti semua angka di sheet.
+        // Sudah terambil otomatis: sheet hanya mengisi angka yang tidak tersedia publik (GAP).
+        const fromSheet = cur.source === "sheet" || cur.source === "none";
         const patch: any = {};
-        for (const k of METRICS) if (l.sheet[k] !== null && l.sheet[k] !== cur[k]) patch[k] = l.sheet[k];
-        if (l.sheet.posted_at && (!cur.posted_at || Date.parse(cur.posted_at) !== Date.parse(l.sheet.posted_at))) patch.posted_at = l.sheet.posted_at;
-        if (Object.keys(patch).length || cur.source === "none") patches.push([cur.id, { ...patch, source: "sheet" }]);
+        for (const k of fromSheet ? METRICS : GAP[l.platform] || []) if (l.sheet[k] !== null && l.sheet[k] !== cur[k]) patch[k] = l.sheet[k];
+        if (fromSheet && l.sheet.posted_at && (!cur.posted_at || Date.parse(cur.posted_at) !== Date.parse(l.sheet.posted_at))) patch.posted_at = l.sheet.posted_at;
+        if (fromSheet && (Object.keys(patch).length || cur.source === "none")) patches.push([cur.id, { ...patch, source: "sheet" }]);
+        else if (!fromSheet && Object.keys(patch).length) patches.push([cur.id, patch]);
       }
     }
     for (let i = 0; i < fresh.length; i += 500) {

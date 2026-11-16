@@ -26,6 +26,9 @@ per brand, sepanjang waktu, per bulan posting, atau rentang tanggal bebas.
 - Tombol ↻ pada satu konten mengambil angkanya saat itu juga.
 - Konten yang belum/tidak bisa diambil otomatis memakai angka dari Google Sheets ("Dari Sheet") atau isian
   manual (tombol ✎).
+- Angka yang diperbarui manual di Google Sheets ikut tersinkron otomatis: semua angka untuk konten yang belum
+  bisa diambil otomatis (mis. Instagram), dan Shares/Saves untuk YouTube & Instagram. Untuk angka yang bisa
+  diambil langsung dari platform, data langsung yang dipakai.
 - YouTube API key dan sesi akun Instagram diisi dari dashboard: menu **Google Sheets & status**.
   Keduanya hanya bisa ditulis dari dashboard, tidak bisa dibaca kembali.
 - Bagian Instagram bersifat eksperimental dan belum teruji dengan akun sungguhan.
