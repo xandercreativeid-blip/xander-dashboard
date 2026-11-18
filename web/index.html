@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -136,24 +136,24 @@ const CFG = window.XANDER_CONFIG || {};
 const LIVE = !!(CFG.supabaseUrl && CFG.supabaseAnonKey);
 const PLAT = { tiktok: 'TikTok', instagram: 'Instagram', youtube: 'YouTube' };
 const METRICS = ['views', 'likes', 'comments', 'shares', 'saves'];
-const nf = new Intl.NumberFormat('id-ID');
-const cf = new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 });
+const nf = new Intl.NumberFormat('en-US');
+const cf = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = (n) => (n === null || n === undefined ? '–' : nf.format(n));
-const pct = (x) => (x === null ? '–' : (x * 100).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%');
+const pct = (x) => (x === null ? '–' : (x * 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%');
 const WIB = 7 * 3600000;
 const dayKey = (iso) => (iso ? new Date(Date.parse(iso) + WIB).toISOString().slice(0, 10) : null);
 const todayKey = () => dayKey(new Date().toISOString());
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const monthLabel = (ym) => `${MONTH_NAMES[+ym.slice(5, 7) - 1]} ${ym.slice(0, 4)}`;
-const dateLabel = (key) => (key ? `${+key.slice(8, 10)} ${MONTH_NAMES[+key.slice(5, 7) - 1]} ${key.slice(0, 4)}` : '–');
+const dateLabel = (key) => (key ? `${MONTH_NAMES[+key.slice(5, 7) - 1]} ${+key.slice(8, 10)}, ${key.slice(0, 4)}` : '–');
 function ago(iso) {
   if (!iso) return '';
   const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
-  if (m < 60) return `${m} mnt lalu`;
-  if (m < 48 * 60) return `${Math.round(m / 60)} jam lalu`;
-  return `${Math.round(m / 1440)} hari lalu`;
+  if (m < 60) return m < 1 ? 'just now' : `${m} min ago`;
+  if (m < 48 * 60) return `${Math.round(m / 60)} h ago`;
+  return `${Math.round(m / 1440)} days ago`;
 }
 function toast(msg) {
   document.querySelectorAll('.toast').forEach((t) => t.remove());
@@ -169,7 +169,7 @@ const DB = {
     await new Promise((ok, fail) => {
       const s = document.createElement('script');
       s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
-      s.onload = ok; s.onerror = () => fail(new Error('Gagal memuat pustaka Supabase')); document.head.append(s);
+      s.onload = ok; s.onerror = () => fail(new Error('Could not load the Supabase library')); document.head.append(s);
     });
     this.sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey);
   },
@@ -247,7 +247,7 @@ const DB = {
   kick() { if (LIVE) this.fn({ action: 'run' }).catch(() => {}); },
   async downloadSheet(url) {
     const res = await this.fn({ action: 'sheet', url });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Sheet tidak bisa diunduh (HTTP ${res.status})`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Could not download the Sheet (HTTP ${res.status})`);
     return res.arrayBuffer();
   },
   async isMember() { return !!this.ok(await this.sb.rpc('is_member')); },
@@ -322,77 +322,77 @@ function render() {
   const sum = summarize(list);
   const counts = new Map();
   for (const c of S.contents) counts.set(c.brand_id, (counts.get(c.brand_id) || 0) + 1);
-  const brandsSorted = [...S.brands].sort((a, b) => a.name.localeCompare(b.name, 'id'));
+  const brandsSorted = [...S.brands].sort((a, b) => a.name.localeCompare(b.name, 'en'));
   const shown = brandsSorted.filter((b) => b.name.toLowerCase().includes(S.brandSearch.toLowerCase()));
   const target = brand ? brand.views_target : null;
   const range = periodRange();
-  const periodText = range ? `${dateLabel(range[0] === '0000-01-01' ? null : range[0])} – ${dateLabel(range[1] === '9999-12-31' ? null : range[1])}` : 'Semua waktu';
+  const periodText = range ? `${dateLabel(range[0] === '0000-01-01' ? null : range[0])} – ${dateLabel(range[1] === '9999-12-31' ? null : range[1])}` : 'All time';
   const manualPl = ['instagram', 'youtube'].filter((p) => S.platforms.has(p)).map((p) => PLAT[p]);
-  const manualNote = !manualPl.length ? 'TikTok + Sheet, angka tertinggi' : manualPl.length === 2 && S.platforms.has('tiktok') ? 'IG &amp; YouTube: input manual dari Sheet' : manualPl.join(' &amp; ') + ': input manual dari Sheet';
+  const manualNote = !manualPl.length ? 'TikTok + Sheet, highest value' : manualPl.length === 2 && S.platforms.has('tiktok') ? 'IG &amp; YouTube: manual input (Sheet)' : manualPl.join(' &amp; ') + ': manual input (Sheet)';
   const cs = [S.settings.collector_status, S.settings.collector_heartbeat].filter((x) => x?.at).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
 
   $('#root').innerHTML = `
   <div class="app">
     <aside class="side">
       <div class="brandmark"><b>XANDER CREATIVE</b><span>Content Performance</span></div>
-      <input type="search" id="brandSearch" placeholder="Cari brand…" value="${esc(S.brandSearch)}" aria-label="Cari brand">
+      <input type="search" id="brandSearch" placeholder="Search brands…" value="${esc(S.brandSearch)}" aria-label="Search brands">
       <nav class="brandlist" aria-label="Brand">
-        <button data-brand="all" aria-current="${S.brandId === 'all'}"><span class="name">Semua Brand</span><small>${nf.format(S.contents.length)}</small></button>
+        <button data-brand="all" aria-current="${S.brandId === 'all'}"><span class="name">All Brands</span><small>${nf.format(S.contents.length)}</small></button>
         ${shown.map((b) => `<button data-brand="${b.id}" aria-current="${S.brandId === b.id}"><span class="name">${esc(b.name)}</span><small>${nf.format(counts.get(b.id) || 0)}</small></button>`).join('')}
       </nav>
       <div class="sidefoot">
-        <button class="btn" id="addBrand">+ Brand baru</button>
-        <button class="btn" id="openSettings">Google Sheets &amp; status</button>
-        ${LIVE ? '<button class="btn ghost" id="logout">Keluar</button>' : ''}
+        <button class="btn" id="addBrand">+ New Brand</button>
+        <button class="btn" id="openSettings">Data Sources &amp; Settings</button>
+        ${LIVE ? '<button class="btn ghost" id="logout">Sign Out</button>' : ''}
       </div>
     </aside>
     <main class="main">
-      ${LIVE ? '' : '<div class="banner">Mode pratinjau: data contoh dari Google Sheets Anda. Perubahan di sini tidak tersimpan.</div>'}
-      <select class="mobilebrand" id="mobileBrand" aria-label="Pilih brand">
-        <option value="all">Semua Brand</option>
+      ${LIVE ? '' : '<div class="banner">Preview mode: sample data from your Google Sheet. Changes here are not saved.</div>'}
+      <select class="mobilebrand" id="mobileBrand" aria-label="Select brand">
+        <option value="all">All Brands</option>
         ${brandsSorted.map((b) => `<option value="${b.id}" ${S.brandId === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}
       </select>
       <div class="head">
         <div>
-          <h1>${esc(brand ? brand.name : 'Semua Brand')}</h1>
-          <div class="sub">${brand ? `Target views per konten: <b class="num">${nf.format(target)}</b>` : `${S.brands.length} brand · target views mengikuti setelan tiap brand`}${cs?.at ? ` · Pengambil data aktif ${ago(cs.at)}` : ''}</div>
+          <h1>${esc(brand ? brand.name : 'All Brands')}</h1>
+          <div class="sub">${brand ? `Views target per content: <b class="num">${nf.format(target)}</b>` : `${S.brands.length} brands · views target set per brand`}${cs?.at ? ` · Data updated ${ago(cs.at)}` : ''}</div>
         </div>
         <div class="actions">
-          ${brand ? '<button class="btn" id="editBrand">Atur brand</button>' : ''}
-          <button class="btn" id="refreshAll" ${list.length ? '' : 'disabled'}>↻ Refresh data</button>
-          <button class="btn primary" id="addLinks" ${S.brands.length ? '' : 'disabled'}>+ Tambah link</button>
+          ${brand ? '<button class="btn" id="editBrand">Brand Settings</button>' : ''}
+          <button class="btn" id="refreshAll" ${list.length ? '' : 'disabled'}>↻ Refresh Data</button>
+          <button class="btn primary" id="addLinks" ${S.brands.length ? '' : 'disabled'}>+ Add Links</button>
         </div>
       </div>
       <div class="filters">
-        <select id="period" aria-label="Periode">
-          ${[['all', 'Semua waktu'], ['this', 'Bulan ini'], ['last', 'Bulan lalu'], ['30', '30 hari terakhir'], ['90', '90 hari terakhir'], ['year', 'Tahun ini'], ['month', 'Pilih bulan…'], ['range', 'Rentang tanggal…']]
+        <select id="period" aria-label="Period">
+          ${[['all', 'All Time'], ['this', 'This Month'], ['last', 'Last Month'], ['30', 'Last 30 Days'], ['90', 'Last 90 Days'], ['year', 'This Year'], ['month', 'Select Month…'], ['range', 'Custom Range…']]
             .map(([v, l]) => `<option value="${v}" ${S.period === v ? 'selected' : ''}>${l}</option>`).join('')}
         </select>
-        ${S.period === 'month' ? `<input type="month" id="month" value="${S.month}" aria-label="Bulan">` : ''}
-        ${S.period === 'range' ? `<input type="date" id="from" value="${S.from}" aria-label="Dari tanggal"><span>s.d.</span><input type="date" id="to" value="${S.to}" aria-label="Sampai tanggal">` : ''}
+        ${S.period === 'month' ? `<input type="month" id="month" value="${S.month}" aria-label="Month">` : ''}
+        ${S.period === 'range' ? `<input type="date" id="from" value="${S.from}" aria-label="From date"><span>to</span><input type="date" id="to" value="${S.to}" aria-label="To date">` : ''}
         <div class="chips" role="group" aria-label="Platform">
-          <button class="chip" data-plat="all" aria-pressed="${S.platforms.size === Object.keys(PLAT).length}">All Platform</button>
+          <button class="chip" data-plat="all" aria-pressed="${S.platforms.size === Object.keys(PLAT).length}">All Platforms</button>
           ${Object.entries(PLAT).map(([k, l]) => `<button class="chip" data-plat="${k}" aria-pressed="${S.platforms.size === 1 && S.platforms.has(k)}"><i class="dot" style="background:var(--${k})"></i>${l}</button>`).join('')}
         </div>
-        <span class="sub">Tanggal posting: ${periodText}</span>
+        <span class="sub">Posting date: ${periodText}</span>
       </div>
       <div class="tiles">
-        ${tile('Total Views', sum.views, `${nf.format(sum.n)} konten`, true)}
+        ${tile('Total Views', sum.views, `${nf.format(sum.n)} contents`, true)}
         ${tile('Likes', sum.likes)}
-        ${tile('Komentar', sum.comments)}
+        ${tile('Comments', sum.comments)}
         ${tile('Shares', sum.shares, manualNote)}
         ${tile('Saves', sum.saves, manualNote)}
-        <div class="tile"><div class="lab">Engagement Rate</div><div class="val">${pct(sum.er)}</div><div class="note">interaksi ÷ views</div></div>
-        <div class="tile"><div class="lab">Konten ≥ ${brand ? cf.format(target) + ' views' : 'target views'}</div><div class="val">${nf.format(sum.hit)}<span style="font-size:14px;font-weight:500;color:var(--text-3)"> / ${nf.format(sum.withData)}</span></div><div class="note">${sum.withData ? pct(sum.hit / sum.withData) + ' dari konten berdata' : ''}</div></div>
+        <div class="tile"><div class="lab">Engagement Rate</div><div class="val">${pct(sum.er)}</div><div class="note">engagements ÷ views</div></div>
+        <div class="tile"><div class="lab">Contents ≥ ${brand ? cf.format(target) + ' Views' : 'Views Target'}</div><div class="val">${nf.format(sum.hit)}<span style="font-size:14px;font-weight:500;color:var(--text-3)"> / ${nf.format(sum.withData)}</span></div><div class="note">${sum.withData ? pct(sum.hit / sum.withData) + ' of contents with data' : ''}</div></div>
       </div>
       <section class="card">
-        <header><h2>Views per bulan posting</h2><div class="legend">${Object.entries(PLAT).filter(([k]) => S.platforms.has(k)).map(([k, l]) => `<span><i class="dot" style="background:var(--${k})"></i>${l}</span>`).join('')}</div></header>
+        <header><h2>Views by Posting Month</h2><div class="legend">${Object.entries(PLAT).filter(([k]) => S.platforms.has(k)).map(([k, l]) => `<span><i class="dot" style="background:var(--${k})"></i>${l}</span>`).join('')}</div></header>
         <div class="body"><div class="chartwrap" id="chart"></div></div>
         <div class="scroll" id="monthly"></div>
       </section>
-      ${S.brandId === 'all' ? '<section class="card"><header><h2>Perbandingan brand</h2></header><div class="scroll" id="brandTable" style="margin-top:8px"></div></section>' : ''}
+      ${S.brandId === 'all' ? '<section class="card"><header><h2>Brand Comparison</h2></header><div class="scroll" id="brandTable" style="margin-top:8px"></div></section>' : ''}
       <section class="card">
-        <header><h2>Daftar konten</h2><div class="actions"><input type="search" id="q" placeholder="Cari judul / link…" value="${esc(S.q)}" aria-label="Cari konten"><button class="btn" id="csv">Unduh CSV</button></div></header>
+        <header><h2>Content List</h2><div class="actions"><input type="search" id="q" placeholder="Search title / link…" value="${esc(S.q)}" aria-label="Search contents"><button class="btn" id="csv">Export CSV</button></div></header>
         <div class="scroll" id="contentTable" style="margin-top:8px"></div>
       </section>
     </main>
@@ -429,7 +429,7 @@ function byMonth(list) {
 function renderChart(list) {
   const el = $('#chart');
   let months = byMonth(list);
-  if (!months.length) { el.innerHTML = '<div class="empty">Belum ada konten bertanggal pada filter ini.</div>'; return; }
+  if (!months.length) { el.innerHTML = '<div class="empty">No dated contents for this filter yet.</div>'; return; }
   if (months.length > 36) months = months.slice(-36);
   const W = Math.max(320, el.clientWidth), H = 240, padL = 44, padB = 24, padT = 8;
   const plats = Object.keys(PLAT).filter((p) => S.platforms.has(p));
@@ -454,12 +454,12 @@ function renderChart(list) {
     if (i % every === 0) g += `<text x="${x + bw / 2}" y="${H - 7}" text-anchor="middle">${MONTH_NAMES[+m.ym.slice(5, 7) - 1]} ${m.ym.slice(2, 4)}</text>`;
     g += `<rect data-i="${i}" x="${padL + i * slot}" y="${padT}" width="${slot}" height="${plotH}" fill="transparent"/>`;
   });
-  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Views per bulan posting, rincian ada di tabel di bawah">${g}</svg><div class="tip"></div>`;
+  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Views by posting month; details in the table below">${g}</svg><div class="tip"></div>`;
   const tip = $('.tip', el);
   el.querySelectorAll('rect[data-i]').forEach((r) => {
     r.addEventListener('mousemove', (e) => {
       const m = months[+r.dataset.i], s = summarize(m.items);
-      tip.innerHTML = `<b>${monthLabel(m.ym)}</b>${plats.map((p) => `<div><span><i class="dot" style="background:var(--${p})"></i>${PLAT[p]}</span><span class="num">${nf.format(m[p])}</span></div>`).join('')}<div><span>Total views</span><b class="num" style="margin:0">${nf.format(s.views)}</b></div><div><span>Konten</span><span class="num">${s.n}</span></div><div><span>≥ target</span><span class="num">${s.hit}</span></div>`;
+      tip.innerHTML = `<b>${monthLabel(m.ym)}</b>${plats.map((p) => `<div><span><i class="dot" style="background:var(--${p})"></i>${PLAT[p]}</span><span class="num">${nf.format(m[p])}</span></div>`).join('')}<div><span>Total views</span><b class="num" style="margin:0">${nf.format(s.views)}</b></div><div><span>Contents</span><span class="num">${s.n}</span></div><div><span>≥ Target</span><span class="num">${s.hit}</span></div>`;
       tip.style.display = 'block';
       const box = el.getBoundingClientRect();
       let left = e.clientX - box.left + 14; if (left + tip.offsetWidth > box.width) left = e.clientX - box.left - tip.offsetWidth - 14;
@@ -473,15 +473,15 @@ function niceStep(raw) {
   return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
 }
 const sumCells = (s) => `<td class="num">${nf.format(s.n)}</td><td class="num">${nf.format(s.views)}</td><td class="num">${nf.format(s.likes)}</td><td class="num">${nf.format(s.comments)}</td><td class="num">${nf.format(s.shares)}</td><td class="num">${nf.format(s.saves)}</td><td class="num">${pct(s.er)}</td><td class="num">${nf.format(s.hit)} <span style="color:var(--text-3)">(${s.withData ? Math.round((s.hit / s.withData) * 100) : 0}%)</span></td>`;
-const SUM_HEAD = '<th>Konten</th><th>Views</th><th>Likes</th><th>Komentar</th><th>Shares</th><th>Saves</th><th>ER</th><th>≥ Target</th>';
+const SUM_HEAD = '<th>Contents</th><th>Views</th><th>Likes</th><th>Comments</th><th>Shares</th><th>Saves</th><th>ER</th><th>≥ Target</th>';
 
 function renderMonthly(list) {
   const months = byMonth(list).filter((m) => m.items.length).reverse();
   const undated = list.filter((c) => !c.posted_at);
   if (!months.length && !undated.length) { $('#monthly').innerHTML = ''; return; }
-  $('#monthly').innerHTML = `<table><thead><tr><th>Bulan posting</th>${SUM_HEAD}</tr></thead><tbody>
-    ${months.map((m) => `<tr class="clickable" data-month="${m.ym}" title="Tampilkan bulan ini saja"><td>${monthLabel(m.ym)}</td>${sumCells(summarize(m.items))}</tr>`).join('')}
-    ${undated.length ? `<tr><td>Tanggal belum diketahui</td>${sumCells(summarize(undated))}</tr>` : ''}
+  $('#monthly').innerHTML = `<table><thead><tr><th>Posting Month</th>${SUM_HEAD}</tr></thead><tbody>
+    ${months.map((m) => `<tr class="clickable" data-month="${m.ym}" title="Show this month only"><td>${monthLabel(m.ym)}</td>${sumCells(summarize(m.items))}</tr>`).join('')}
+    ${undated.length ? `<tr><td>Date unknown</td>${sumCells(summarize(undated))}</tr>` : ''}
   </tbody></table>`;
 }
 function renderBrandTable(list) {
@@ -491,15 +491,15 @@ function renderBrandTable(list) {
 }
 
 function statusBadge(c) {
-  if (c.refresh_requested_at) return '<span class="badge warn">Menunggu refresh</span>';
-  if (c.status === 'unavailable') return `<span class="badge bad" title="${esc(c.last_error)}">Tidak tersedia</span>`;
-  if (c.source === 'auto') return `<span class="badge good" title="${c.last_error ? 'Percobaan terakhir gagal: ' + esc(c.last_error) : 'Diambil otomatis'}">Live</span> <span style="color:var(--text-3)">${ago(c.last_fetched_at)}</span>`;
-  if (c.source === 'sheet') return `<span class="badge mute" title="${esc(c.last_error || 'Angka dari Google Sheets, belum bisa diambil otomatis')}">Dari Sheet</span>`;
+  if (c.refresh_requested_at) return '<span class="badge warn">Refresh pending</span>';
+  if (c.status === 'unavailable') return `<span class="badge bad" title="${esc(c.last_error)}">Unavailable</span>`;
+  if (c.source === 'auto') return `<span class="badge good" title="${c.last_error ? 'Last attempt failed: ' + esc(c.last_error) : 'Fetched automatically'}">Live</span> <span style="color:var(--text-3)">${ago(c.last_fetched_at)}</span>`;
+  if (c.source === 'sheet') return `<span class="badge mute" title="${esc(c.last_error || 'Numbers from Google Sheets')}">From Sheet</span>`;
   if (c.source === 'manual') return '<span class="badge mute">Manual</span>';
-  if (c.status === 'error') return `<span class="badge bad" title="${esc(c.last_error)}">Gagal diambil</span>`;
-  return '<span class="badge warn">Antre</span>';
+  if (c.status === 'error') return `<span class="badge bad" title="${esc(c.last_error)}">Fetch failed</span>`;
+  return '<span class="badge warn">Queued</span>';
 }
-const COLS = [['platform', 'Platform'], ['title', 'Konten'], ['posted_at', 'Tgl posting'], ['views', 'Views'], ['likes', 'Likes'], ['comments', 'Komentar'], ['shares', 'Shares'], ['saves', 'Saves'], ['er', 'ER']];
+const COLS = [['platform', 'Platform'], ['title', 'Content'], ['posted_at', 'Posted'], ['views', 'Views'], ['likes', 'Likes'], ['comments', 'Comments'], ['shares', 'Shares'], ['saves', 'Saves'], ['er', 'ER']];
 function sortedContents(list) {
   const q = S.q.trim().toLowerCase();
   let rows = q ? list.filter((c) => (c.title || '').toLowerCase().includes(q) || c.url.toLowerCase().includes(q)) : list.slice();
@@ -521,20 +521,20 @@ function renderContents(list) {
   const slice = rows.slice(S.page * per, S.page * per + per);
   const cols = all ? [['brand', 'Brand'], ...COLS] : COLS;
   const arrow = (k) => (S.sort.key === k ? (S.sort.dir > 0 ? ' ↑' : ' ↓') : '');
-  if (!rows.length) { $('#contentTable').innerHTML = '<div class="empty">Belum ada konten pada filter ini. Klik “+ Tambah link” untuk memasukkan link konten.</div>'; return; }
+  if (!rows.length) { $('#contentTable').innerHTML = '<div class="empty">No contents for this filter yet. Click “+ Add Links” to add content links.</div>'; return; }
   $('#contentTable').innerHTML = `<table><thead><tr>${cols.map(([k, l]) => `<th data-sort="${k}" class="${['brand', 'platform', 'title', 'posted_at'].includes(k) ? 'l' : ''}">${l}${arrow(k)}</th>`).join('')}<th class="l">Status</th><th></th></tr></thead><tbody>
     ${slice.map((c) => `<tr>
       ${all ? `<td class="l">${esc(S.brandMap.get(c.brand_id)?.name)}</td>` : ''}
       <td class="l"><i class="dot" style="background:var(--${c.platform})"></i> ${PLAT[c.platform]}</td>
       <td class="l title"><a href="${esc(c.url)}" target="_blank" rel="noopener" title="${esc(c.title || c.url)}">${esc(c.title || c.url.replace(/^https:\/\/(www\.)?/, ''))}</a></td>
       <td class="l num">${dateLabel(dayKey(c.posted_at))}</td>
-      <td class="num">${fmt(c.views)}${c.views !== null && c.views >= targetOf(c) ? ' <span class="badge good" title="Mencapai target views">✓</span>' : ''}</td>
-      <td class="num">${fmt(c.likes)}</td><td class="num">${fmt(c.comments)}</td>${['shares', 'saves'].map((k) => c.platform === 'tiktok' ? `<td class="num">${fmt(c[k])}</td>` : `<td class="num" title="Input manual dari Sheet / tombol ✎">${fmt(c[k])}<sup style="color:var(--text-3)"> m</sup></td>`).join('')}
+      <td class="num">${fmt(c.views)}${c.views !== null && c.views >= targetOf(c) ? ' <span class="badge good" title="Views target reached">✓</span>' : ''}</td>
+      <td class="num">${fmt(c.likes)}</td><td class="num">${fmt(c.comments)}</td>${['shares', 'saves'].map((k) => c.platform === 'tiktok' ? `<td class="num">${fmt(c[k])}</td>` : `<td class="num" title="Manual input (Sheet or ✎ button)">${fmt(c[k])}<sup style="color:var(--text-3)"> m</sup></td>`).join('')}
       <td class="num">${pct(erOf(c))}</td>
       <td class="l">${statusBadge(c)}</td>
-      <td><button class="btn ghost" data-act="refresh" data-id="${c.id}" title="Refresh konten ini" aria-label="Refresh">↻</button><button class="btn ghost" data-act="edit" data-id="${c.id}" title="Isi / ubah angka manual" aria-label="Ubah">✎</button></td>
+      <td><button class="btn ghost" data-act="refresh" data-id="${c.id}" title="Refresh this content" aria-label="Refresh">↻</button><button class="btn ghost" data-act="edit" data-id="${c.id}" title="Edit numbers manually" aria-label="Edit">✎</button></td>
     </tr>`).join('')}</tbody></table>
-    <div class="pager"><span>${nf.format(rows.length)} konten · halaman ${S.page + 1} dari ${pages}</span><span><button class="btn" id="prev" ${S.page ? '' : 'disabled'}>‹ Sebelumnya</button> <button class="btn" id="next" ${S.page < pages - 1 ? '' : 'disabled'}>Berikutnya ›</button></span></div>`;
+    <div class="pager"><span>${nf.format(rows.length)} contents · page ${S.page + 1} of ${pages}</span><span><button class="btn" id="prev" ${S.page ? '' : 'disabled'}>‹ Previous</button> <button class="btn" id="next" ${S.page < pages - 1 ? '' : 'disabled'}>Next ›</button></span></div>`;
 }
 
 // ---------------------------------------------------------------- events
@@ -562,7 +562,7 @@ function bind(list) {
   on('#logout', 'click', async () => { await DB.sb.auth.signOut(); location.reload(); });
   on('#refreshAll', 'click', async () => {
     const ids = list.filter((c) => c.status !== 'unavailable').map((c) => c.id);
-    if (ids.length > 300 && !confirm(`Refresh ${nf.format(ids.length)} konten? Ini bisa memakan waktu beberapa putaran pengambilan data.`)) return;
+    if (ids.length > 300 && !confirm(`Refresh ${nf.format(ids.length)} contents? This may take several update cycles.`)) return;
     await doRefresh(ids);
   });
   bindTable(list);
@@ -582,22 +582,22 @@ function bindTable(list) {
 }
 async function doRefresh(ids) {
   try {
-    toast(ids.length <= 30 ? 'Mengambil data terbaru…' : 'Mengirim permintaan refresh…');
+    toast(ids.length <= 30 ? 'Fetching the latest data…' : 'Sending refresh request…');
     const r = await DB.requestRefresh(ids);
-    if (r === 'demo') toast('Mode pratinjau: refresh tidak dijalankan.');
-    else if (r === 'queued') toast(`${nf.format(ids.length)} konten masuk antrean dan diperbarui bertahap (±35 konten TikTok per 5 menit).`);
+    if (r === 'demo') toast('Preview mode: refresh is not run.');
+    else if (r === 'queued') toast(`${nf.format(ids.length)} contents queued; they update gradually (about 35 TikTok contents every 5 minutes).`);
     else {
       const ok = r.tiktok.ok + r.youtube.ok + r.instagram.ok, bad = r.queued - ok;
       const why = r.instagram.error || r.youtube.error || r.tiktok.error;
-      toast(`${ok} konten diperbarui` + (bad ? `, ${bad} tidak bisa diambil${why ? ' (' + why + ')' : ''}.` : '.'));
+      toast(`${ok} contents updated` + (bad ? `, ${bad} could not be fetched${why ? ' (' + why + ')' : ''}.` : '.'));
     }
     render();
-  } catch (e) { toast('Gagal: ' + e.message); }
+  } catch (e) { toast('Failed: ' + e.message); }
 }
 
 // ---------------------------------------------------------------- sinkronisasi Google Sheets
 function loadScript(src) {
-  return new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => fail(new Error('Gagal memuat ' + src)); document.head.append(s); });
+  return new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => fail(new Error('Could not load ' + src)); document.head.append(s); });
 }
 async function syncSheet(silent = false) {
   const cfg = S.settings.sheet;
@@ -633,7 +633,7 @@ async function syncSheet(silent = false) {
     for (let i = 0; i < fresh.length; i += 500) await DB.addContents(fresh.slice(i, i + 500));
     for (let i = 0; i < patches.length; i += 10) await Promise.all(patches.slice(i, i + 10).map(([id, p]) => DB.updateContent(id, p)));
     stats.added += fresh.length; stats.updated += patches.length;
-    if (!silent) toast(`Menyinkronkan Sheet… ${tab.tab}`);
+    if (!silent) toast(`Syncing Sheet… ${tab.tab}`);
   }
   stats.last_added_at = stats.added ? stats.at : S.settings.sheet_last_sync?.last_added_at || null;
   await DB.setSetting('sheet_last_sync', stats);
@@ -643,16 +643,16 @@ async function syncSheet(silent = false) {
 async function autoSync() {
   const last = S.settings.sheet_last_sync?.at;
   if (!LIVE || !S.settings.sheet?.url || (last && Date.now() - Date.parse(last) < 6 * 3600000)) return;
-  try { const s = await syncSheet(true); if (s && (s.added || s.brands)) { toast(`Sheet disinkronkan: ${s.added} link baru.`); render(); } }
-  catch (e) { console.warn('Sinkron sheet gagal', e); }
+  try { const s = await syncSheet(true); if (s && (s.added || s.brands)) { toast(`Sheet synced: ${s.added} new links.`); render(); } }
+  catch (e) { console.warn('Sheet sync failed', e); }
 }
 
 function downloadCsv(rows) {
-  const head = ['Brand', 'Platform', 'Link', 'Judul', 'Tanggal posting', 'Views', 'Likes', 'Komentar', 'Shares', 'Saves', 'ER (%)', 'Sumber'];
+  const head = ['Brand', 'Platform', 'Link', 'Title', 'Posting date', 'Views', 'Likes', 'Comments', 'Shares', 'Saves', 'ER (%)', 'Source'];
   const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const lines = rows.map((c) => [S.brandMap.get(c.brand_id)?.name, PLAT[c.platform], c.url, c.title, dayKey(c.posted_at), c.views, c.likes, c.comments, c.shares, c.saves, erOf(c) === null ? '' : (erOf(c) * 100).toFixed(2), c.source].map(q).join(','));
   const blob = new Blob(['﻿' + [head.map(q).join(','), ...lines].join('\n')], { type: 'text/csv' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `konten-${todayKey()}.csv`; a.click();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `contents-${todayKey()}.csv`; a.click();
 }
 
 // ---------------------------------------------------------------- dialogs
@@ -666,22 +666,22 @@ function dialog(html, onSubmit) {
     if (e.submitter?.value === 'cancel') return;
     e.preventDefault();
     try { if ((await onSubmit(new FormData(form), e.submitter?.value, d)) !== false) { d.close(); render(); } }
-    catch (err) { toast('Gagal: ' + err.message); }
+    catch (err) { toast('Failed: ' + err.message); }
   });
   d.showModal();
   return d;
 }
-const FOOT = (extra = '') => `<div class="foot"><span>${extra}</span><span><button class="btn" value="cancel" formnovalidate>Batal</button> <button class="btn primary" value="save">Simpan</button></span></div>`;
+const FOOT = (extra = '') => `<div class="foot"><span>${extra}</span><span><button class="btn" value="cancel" formnovalidate>Cancel</button> <button class="btn primary" value="save">Save</button></span></div>`;
 
 function brandDialog(b) {
-  dialog(`<h3>${b ? 'Atur brand' : 'Brand baru'}</h3>
-    <label>Nama brand<input name="name" required value="${esc(b?.name)}"></label>
-    <label>Target views per konten<input name="target" type="number" min="1" step="1" required value="${b?.views_target ?? 10000}"></label>
-    <label>Nama tab di Google Sheets (opsional, jika beda dari nama brand)<input name="tab" value="${esc(b?.sheet_tab)}"></label>
-    ${FOOT(b ? '<button class="btn danger" value="delete" formnovalidate>Hapus brand</button>' : '')}`,
+  dialog(`<h3>${b ? 'Brand Settings' : 'New Brand'}</h3>
+    <label>Brand name<input name="name" required value="${esc(b?.name)}"></label>
+    <label>Views target per content<input name="target" type="number" min="1" step="1" required value="${b?.views_target ?? 10000}"></label>
+    <label>Google Sheets tab name (optional, if different from the brand name)<input name="tab" value="${esc(b?.sheet_tab)}"></label>
+    ${FOOT(b ? '<button class="btn danger" value="delete" formnovalidate>Delete Brand</button>' : '')}`,
   async (fd, action) => {
     if (action === 'delete') {
-      if (!confirm(`Hapus brand "${b.name}" beserta semua kontennya? Tindakan ini tidak bisa dibatalkan.`)) return false;
+      if (!confirm(`Delete brand "${b.name}" and all its contents? This cannot be undone.`)) return false;
       await DB.deleteBrand(b.id); S.brandId = 'all'; return;
     }
     const row = { name: fd.get('name').trim(), views_target: Math.max(1, Math.round(+fd.get('target'))), sheet_tab: fd.get('tab').trim() || null };
@@ -690,22 +690,22 @@ function brandDialog(b) {
 }
 
 function linksDialog() {
-  const d = dialog(`<h3>Tambah link konten</h3>
+  const d = dialog(`<h3>Add Content Links</h3>
     <label>Brand<select name="brand">${[...S.brands].sort((a, b) => a.name.localeCompare(b.name)).map((b) => `<option value="${b.id}" ${b.id === S.brandId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
-    <label>Link TikTok, Instagram Reels, atau YouTube Shorts — satu atau banyak sekaligus (satu per baris)<textarea name="links" placeholder="https://www.tiktok.com/@akun/video/…&#10;https://www.instagram.com/reel/…&#10;https://www.youtube.com/shorts/…" required></textarea></label>
-    <div class="hint" id="linkInfo">Platform dan tanggal posting dikenali otomatis.</div>
+    <label>TikTok, Instagram Reels or YouTube Shorts links — one or many at once (one per line)<textarea name="links" placeholder="https://www.tiktok.com/@account/video/…&#10;https://www.instagram.com/reel/…&#10;https://www.youtube.com/shorts/…" required></textarea></label>
+    <div class="hint" id="linkInfo">Platform and posting date are detected automatically.</div>
     ${FOOT()}`,
   async (fd) => {
     const { rows } = parseLinks(fd.get('links'), fd.get('brand'));
-    if (!rows.length) { toast('Tidak ada link baru yang dikenali.'); return false; }
+    if (!rows.length) { toast('No new links recognized.'); return false; }
     await DB.addContents(rows); DB.kick();
     S.brandId = fd.get('brand');
-    toast(`${rows.length} link ditambahkan. Angkanya terisi otomatis dalam beberapa menit.`);
+    toast(`${rows.length} links added. Numbers fill in automatically within a few minutes.`);
   });
   const upd = () => {
     const r = parseLinks($('textarea', d).value, $('select', d).value);
     const per = Object.entries(PLAT).map(([k, l]) => [l, r.rows.filter((x) => x.platform === k).length]).filter((x) => x[1]).map(([l, n]) => `${n} ${l}`).join(', ');
-    $('#linkInfo', d).textContent = `${r.rows.length} link baru${per ? ` (${per})` : ''}` + (r.dup ? ` · ${r.dup} sudah ada` : '') + (r.bad ? ` · ${r.bad} baris tidak dikenali` : '');
+    $('#linkInfo', d).textContent = `${r.rows.length} new links${per ? ` (${per})` : ''}` + (r.dup ? ` · ${r.dup} already added` : '') + (r.bad ? ` · ${r.bad} lines not recognized` : '');
   };
   $('textarea', d).addEventListener('input', upd); $('select', d).addEventListener('change', upd);
 }
@@ -725,13 +725,13 @@ function parseLinks(text, brandId) {
 
 function contentDialog(c) {
   const f = (k, l) => `<label>${l}<input name="${k}" type="number" min="0" step="1" value="${c[k] ?? ''}"></label>`;
-  dialog(`<h3>Ubah data konten</h3>
-    <div class="hint"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.url)}</a><br>Isi manual dipakai bila data tidak bisa diambil otomatis (mis. Instagram, atau shares/saves dari Insights). Jika pengambilan otomatis berhasil, angka yang tersedia publik akan menimpa isian ini.</div>
-    <label>Tanggal posting<input name="posted" type="date" value="${dayKey(c.posted_at) || ''}"></label>
-    <div class="row">${f('views', 'Views')}${f('likes', 'Likes')}${f('comments', 'Komentar')}${f('shares', 'Shares')}${f('saves', 'Saves')}</div>
-    ${FOOT('<button class="btn danger" value="delete" formnovalidate>Hapus konten</button>')}`,
+  dialog(`<h3>Edit Content Data</h3>
+    <div class="hint"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.url)}</a><br>Numbers entered here are used as-is and are no longer updated from the platform or the Sheet. Use this for numbers from Insights.</div>
+    <label>Posting date<input name="posted" type="date" value="${dayKey(c.posted_at) || ''}"></label>
+    <div class="row">${f('views', 'Views')}${f('likes', 'Likes')}${f('comments', 'Comments')}${f('shares', 'Shares')}${f('saves', 'Saves')}</div>
+    ${FOOT('<button class="btn danger" value="delete" formnovalidate>Delete Content</button>')}`,
   async (fd, action) => {
-    if (action === 'delete') { if (!confirm('Hapus konten ini dari dashboard?')) return false; await DB.deleteContent(c.id); return; }
+    if (action === 'delete') { if (!confirm('Delete this content from the dashboard?')) return false; await DB.deleteContent(c.id); return; }
     const patch = {};
     for (const k of METRICS) { const v = fd.get(k); patch[k] = v === '' ? null : Math.max(0, Math.round(+v)); }
     patch.posted_at = fd.get('posted') ? new Date(fd.get('posted') + 'T05:00:00Z').toISOString() : null;
@@ -746,30 +746,30 @@ async function settingsDialog() {
   const priv = LIVE ? await DB.privateStatus() : {};
   const team = LIVE ? await DB.getTeam() : [];
   const me = LIVE ? (await DB.sb.auth.getUser()).data.user?.email || '' : '';
-  const line = (p) => (cs?.[p] ? `${PLAT[p]}: ${cs[p].ok} berhasil, ${cs[p].failed} gagal, ${cs[p].unavailable} tidak tersedia${cs[p].error ? ` — ${esc(cs[p].error)}` : ''}` : '');
-  dialog(`<h3>Google Sheets &amp; pengambilan data</h3>
-    <label>Link Google Sheets (akses “Siapa saja yang memiliki link: Pelihat”)<input name="url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" value="${esc(sh.url)}"></label>
-    <label>Tab yang dilewati (pisahkan dengan koma)<input name="skip" value="${esc((sh.exclude_tabs || ['Credential Brand', 'List Reporting']).join(', '))}"></label>
-    <div class="hint">Setiap tab lain dianggap satu brand. Link baru di Sheet masuk ke dashboard secara otomatis, biasanya dalam 15 menit (tab diperiksa bergiliran); tombol “Simpan &amp; sinkronkan sekarang” memeriksa semuanya saat itu juga.<br>
-      ${ls?.at ? `Pemeriksaan terakhir ${ago(ls.at)}${ls.last_added_at ? ` · link baru terakhir masuk ${ago(ls.last_added_at)}` : ''}.` : 'Belum pernah disinkronkan.'}${S.settings.sheet_sync_error ? `<br><span style="color:var(--bad)">Sinkron otomatis gagal ${ago(S.settings.sheet_sync_error.at)}: ${esc(S.settings.sheet_sync_error.error)}</span>` : ''}</div>
-    <label>YouTube API key ${priv.youtube_api_key ? '(sudah diisi — kosongkan bila tidak ingin mengubah)' : '(belum diisi — tanpa ini YouTube sering gagal & komentar kosong)'}<input name="yt" type="password" autocomplete="off" placeholder="${priv.youtube_api_key ? '••••••••' : 'AIza…'}"></label>
-    <label>Sesi akun Instagram / cookie “sessionid” ${priv.ig_sessionid ? '(sudah diisi)' : '(belum diisi — tanpa ini Instagram tidak bisa diambil otomatis)'}<input name="ig" type="password" autocomplete="off" placeholder="${priv.ig_sessionid ? '••••••••' : ''}"></label>
-    <label>Anggota tim yang boleh membuka dashboard (satu email per baris). Tiap anggota membuat akunnya sendiri lewat “Buat akun” di halaman login.<textarea name="team" style="min-height:84px">${esc(team.join('\n'))}</textarea></label>
-    <div class="hint"><b>Pengambilan data terakhir:</b> ${cs?.at ? `${ago(cs.at)} — ${cs.queued} konten diproses.<br>${['tiktok', 'instagram', 'youtube'].map(line).filter(Boolean).join('<br>')}` : 'belum ada catatan.'}</div>
-    <div class="foot"><span><button class="btn" value="sync">Simpan &amp; sinkronkan sekarang</button></span><span><button class="btn" value="cancel" formnovalidate>Batal</button> <button class="btn primary" value="save">Simpan</button></span></div>`,
+  const line = (p) => (cs?.[p] ? `${PLAT[p]}: ${cs[p].ok} succeeded, ${cs[p].failed} failed, ${cs[p].unavailable} unavailable${cs[p].error ? ` — ${esc(cs[p].error)}` : ''}` : '');
+  dialog(`<h3>Data Sources &amp; Settings</h3>
+    <label>Google Sheets link (access: “Anyone with the link: Viewer”)<input name="url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" value="${esc(sh.url)}"></label>
+    <label>Tabs to skip (comma-separated)<input name="skip" value="${esc((sh.exclude_tabs || ['Credential Brand', 'List Reporting']).join(', '))}"></label>
+    <div class="hint">Every other tab is treated as one brand. New links and numbers in the Sheet reach the dashboard automatically, usually within 15 minutes (tabs are checked in rotation); “Save &amp; Sync Now” checks every tab right away.<br>
+      ${ls?.at ? `Last checked ${ago(ls.at)}${ls.last_added_at ? ` · last new link added ${ago(ls.last_added_at)}` : ''}.` : 'Not synced yet.'}${S.settings.sheet_sync_error ? `<br><span style="color:var(--bad)">Auto sync failed ${ago(S.settings.sheet_sync_error.at)}: ${esc(S.settings.sheet_sync_error.error)}</span>` : ''}</div>
+    <label>YouTube API key ${priv.youtube_api_key ? '(saved — leave empty to keep it)' : '(not set — without it YouTube often fails and comments stay empty)'}<input name="yt" type="password" autocomplete="off" placeholder="${priv.youtube_api_key ? '••••••••' : 'AIza…'}"></label>
+    <label>Instagram session / “sessionid” cookie ${priv.ig_sessionid ? '(saved)' : '(not set — without it Instagram cannot be fetched automatically)'}<input name="ig" type="password" autocomplete="off" placeholder="${priv.ig_sessionid ? '••••••••' : ''}"></label>
+    <label>Team members allowed to open the dashboard (one email per line). Each member creates their own account via “Create Account” on the sign-in page.<textarea name="team" style="min-height:84px">${esc(team.join('\n'))}</textarea></label>
+    <div class="hint"><b>Last data update:</b> ${cs?.at ? `${ago(cs.at)} — ${cs.queued} contents processed.<br>${['tiktok', 'instagram', 'youtube'].map(line).filter(Boolean).join('<br>')}` : 'no record yet.'}</div>
+    <div class="foot"><span><button class="btn" value="sync">Save &amp; Sync Now</button></span><span><button class="btn" value="cancel" formnovalidate>Cancel</button> <button class="btn primary" value="save">Save</button></span></div>`,
   async (fd, action) => {
-    if (!LIVE) { toast('Mode pratinjau: pengaturan tidak disimpan.'); return; }
+    if (!LIVE) { toast('Preview mode: settings are not saved.'); return; }
     await DB.setSetting('sheet', { url: fd.get('url').trim(), exclude_tabs: fd.get('skip').split(',').map((s) => s.trim()).filter(Boolean) });
     if (fd.get('yt').trim()) await DB.setPrivate('youtube_api_key', fd.get('yt'));
     if (fd.get('ig').trim()) await DB.setPrivate('ig_sessionid', fd.get('ig'));
     await DB.setTeam(fd.get('team').split(/[\s,;]+/), me);
     if (action === 'sync') {
-      if (!fd.get('url').trim()) { toast('Isi link Google Sheets terlebih dahulu.'); return false; }
-      toast('Mengunduh dan membaca Sheet…');
+      if (!fd.get('url').trim()) { toast('Enter the Google Sheets link first.'); return false; }
+      toast('Downloading and reading the Sheet…');
       const st = await syncSheet();
       Object.assign(S, await DB.load());
-      toast(`Sinkron selesai: ${st.added} link baru, ${st.brands} brand baru, ${st.updated} diperbarui. Angka terbaru terisi bertahap.`);
-    } else toast('Pengaturan tersimpan.');
+      toast(`Sync complete: ${st.added} new links, ${st.brands} new brands, ${st.updated} updated. Latest numbers fill in gradually.`);
+    } else toast('Settings saved.');
   });
 }
 
@@ -777,38 +777,38 @@ async function settingsDialog() {
 function loginScreen(msg = '', signup = false) {
   $('#root').innerHTML = `<div class="login"><form id="login"><div class="brandmark" style="padding:0"><b>XANDER CREATIVE</b><span>Content Performance</span></div>
     <label>Email<br><input name="email" type="email" required autocomplete="username" style="width:100%"></label>
-    <label>Kata sandi${signup ? ' (minimal 8 karakter)' : ''}<br><input name="password" type="password" required minlength="${signup ? 8 : 1}" autocomplete="${signup ? 'new-password' : 'current-password'}" style="width:100%"></label>
-    <button class="btn primary">${signup ? 'Buat akun' : 'Masuk'}</button>
-    <button type="button" class="btn ghost" id="swap">${signup ? 'Sudah punya akun? Masuk' : 'Belum punya akun? Buat akun'}</button>
+    <label>Password${signup ? ' (at least 8 characters)' : ''}<br><input name="password" type="password" required minlength="${signup ? 8 : 1}" autocomplete="${signup ? 'new-password' : 'current-password'}" style="width:100%"></label>
+    <button class="btn primary">${signup ? 'Create Account' : 'Sign In'}</button>
+    <button type="button" class="btn ghost" id="swap">${signup ? 'Already have an account? Sign in' : 'No account yet? Create one'}</button>
     <div class="sub" id="loginMsg">${esc(msg)}</div></form></div>`;
   $('#swap').addEventListener('click', () => loginScreen('', !signup));
   $('#login').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target), cred = { email: fd.get('email').trim(), password: fd.get('password') };
-    $('#loginMsg').textContent = 'Memproses…';
+    $('#loginMsg').textContent = 'Processing…';
     if (signup) {
       const { data, error } = await DB.sb.auth.signUp(cred);
-      if (error) return loginScreen(/registered|exists/i.test(error.message) ? 'Email ini sudah punya akun. Silakan masuk.' : 'Gagal membuat akun: ' + error.message, true);
+      if (error) return loginScreen(/registered|exists/i.test(error.message) ? 'This email already has an account. Please sign in.' : 'Could not create the account: ' + error.message, true);
       if (data.session) return start();
-      return loginScreen('Akun dibuat. Buka email Anda dan klik link konfirmasi, lalu masuk di sini.');
+      return loginScreen('Account created. Open your email, click the confirmation link, then sign in here.');
     }
     const { error } = await DB.sb.auth.signInWithPassword(cred);
-    if (error) loginScreen(/confirm/i.test(error.message) ? 'Email belum dikonfirmasi. Klik link di email konfirmasi terlebih dahulu.' : 'Email atau kata sandi salah.');
+    if (error) loginScreen(/confirm/i.test(error.message) ? 'Email not confirmed yet. Click the link in the confirmation email first.' : 'Incorrect email or password.');
     else start();
   });
 }
 async function start() {
-  $('#root').innerHTML = '<div class="empty">Memuat data…</div>';
+  $('#root').innerHTML = '<div class="empty">Loading data…</div>';
   try {
     if (LIVE && !(await DB.isMember())) {
       const email = (await DB.sb.auth.getUser()).data.user?.email;
-      $('#root').innerHTML = `<div class="empty">Email <b>${esc(email)}</b> belum terdaftar sebagai anggota tim.<br>Minta admin menambahkannya di menu “Google Sheets &amp; status”.<br><br><button class="btn" id="out">Keluar</button></div>`;
+      $('#root').innerHTML = `<div class="empty">Email <b>${esc(email)}</b> is not registered as a team member yet.<br>Ask an admin to add it under “Data Sources &amp; Settings”.<br><br><button class="btn" id="out">Sign Out</button></div>`;
       $('#out').onclick = async () => { await DB.sb.auth.signOut(); location.reload(); };
       return;
     }
     Object.assign(S, await DB.load()); render(); autoSync();
   }
-  catch (e) { $('#root').innerHTML = `<div class="empty">Gagal memuat data: ${esc(e.message)}</div>`; }
+  catch (e) { $('#root').innerHTML = `<div class="empty">Could not load data: ${esc(e.message)}</div>`; }
 }
 (async () => {
   try {
