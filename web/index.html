@@ -110,6 +110,41 @@ dialog .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120p
 dialog .foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; }
 dialog .hint { font-size: 12.5px; color: var(--text-2); }
 textarea { min-height: 150px; resize: vertical; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+.exports { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.btn.export { text-align: left; white-space: normal; display: grid; gap: 2px; padding: 10px 12px; }
+.btn.export span { color: var(--text-2); font-size: 12px; }
+.tv { height: 100vh; overflow: hidden; display: grid; grid-template-rows: auto auto 1fr auto; gap: 1.6vh; padding: 2.4vh 2.2vw; cursor: none; }
+.tv.pointer { cursor: default; }
+.tv-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 2vw; }
+.tv-head h1 { font-size: 4.2vh; letter-spacing: -.02em; }
+.tv-head .sub { font-size: 1.9vh; margin-top: .4vh; }
+.tv-clock { text-align: right; font-variant-numeric: tabular-nums; }
+.tv-clock b { display: block; font-size: 4.2vh; font-weight: 650; }
+.tv-clock span { color: var(--text-2); font-size: 1.8vh; }
+.tv-kpis { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 1vw; }
+.tv-kpis .tile { padding: 1.4vh 1vw; border-radius: 1.2vh; }
+.tv-kpis .lab { font-size: 1.7vh; }
+.tv-kpis .val { font-size: 4.4vh; }
+.tv-kpis .note { font-size: 1.5vh; min-height: 0; }
+.tv-body { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 1.2vw; min-height: 0; }
+.tv-body .card { margin: 0; display: flex; flex-direction: column; min-height: 0; }
+.tv-body .card > header h2 { font-size: 2.2vh; }
+.tv-body .legend { font-size: 1.6vh; }
+.tv-body #chart { flex: 1; min-height: 0; margin: 1vh 1vw 1.4vh; }
+.tv-list { list-style: none; margin: 0; padding: .6vh 1vw 1vh; display: grid; gap: .2vh; overflow: hidden; }
+.tv-list li { display: grid; grid-template-columns: 3.4vh minmax(0, 1fr) auto; align-items: center; gap: .8vw; padding: 1vh 0; border-top: 1px solid var(--line); font-size: 2vh; }
+.tv-list li:first-child { border-top: 0; }
+.tv-list .rank { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.tv-list .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-list .name small { display: block; color: var(--text-2); font-size: 1.5vh; }
+.tv-list .v { text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tv-list .v small { display: block; color: var(--text-2); font-weight: 400; font-size: 1.5vh; }
+.tv-foot { display: flex; justify-content: space-between; align-items: center; color: var(--text-3); font-size: 1.6vh; }
+.tv-progress { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; width: 22vw; }
+.tv-progress i { display: block; height: 100%; background: var(--accent); width: 0; }
+.tv-exit { position: fixed; top: 1.2vh; right: 1vw; opacity: 0; transition: opacity .2s; }
+.tv.pointer .tv-exit { opacity: 1; }
+.tv svg text { font-size: 1.5vh; }
 .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--text); color: var(--surface); padding: 9px 14px; border-radius: 8px; box-shadow: var(--shadow); z-index: 50; max-width: calc(100vw - 32px); }
 .login { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
 .login form { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 24px; width: min(360px, 100%); display: grid; gap: 12px; }
@@ -317,6 +352,7 @@ const erOf = (c) => (c.views ? ((c.likes || 0) + (c.comments || 0) + (c.shares |
 function render() {
   S.brandMap = new Map(S.brands.map((b) => [b.id, b]));
   if (S.brandId !== 'all' && !S.brandMap.has(S.brandId)) S.brandId = 'all';
+  if (TV.on) return renderTv();
   const brand = S.brandMap.get(S.brandId);
   const list = filtered();
   const sum = summarize(list);
@@ -360,6 +396,8 @@ function render() {
         <div class="actions">
           ${brand ? '<button class="btn" id="editBrand">Brand Settings</button>' : ''}
           <button class="btn" id="refreshAll" ${list.length ? '' : 'disabled'}>↻ Refresh Data</button>
+          <button class="btn" id="exportBtn" ${list.length ? '' : 'disabled'}>⤓ Export</button>
+          <button class="btn" id="tvBtn">▣ TV Mode</button>
           <button class="btn primary" id="addLinks" ${S.brands.length ? '' : 'disabled'}>+ Add Links</button>
         </div>
       </div>
@@ -392,7 +430,7 @@ function render() {
       </section>
       ${S.brandId === 'all' ? '<section class="card"><header><h2>Brand Comparison</h2></header><div class="scroll" id="brandTable" style="margin-top:8px"></div></section>' : ''}
       <section class="card">
-        <header><h2>Content List</h2><div class="actions"><input type="search" id="q" placeholder="Search title / link…" value="${esc(S.q)}" aria-label="Search contents"><button class="btn" id="csv">Export CSV</button></div></header>
+        <header><h2>Content List</h2><div class="actions"><input type="search" id="q" placeholder="Search title / link…" value="${esc(S.q)}" aria-label="Search contents"><button class="btn" id="csv">⤓ Export</button></div></header>
         <div class="scroll" id="contentTable" style="margin-top:8px"></div>
       </section>
     </main>
@@ -431,7 +469,7 @@ function renderChart(list) {
   let months = byMonth(list);
   if (!months.length) { el.innerHTML = '<div class="empty">No dated contents for this filter yet.</div>'; return; }
   if (months.length > 36) months = months.slice(-36);
-  const W = Math.max(320, el.clientWidth), H = 240, padL = 44, padB = 24, padT = 8;
+  const W = Math.max(320, el.clientWidth), H = TV.on ? Math.max(200, el.clientHeight) : 240, padL = TV.on ? 68 : 44, padB = 24, padT = 8;
   const plats = Object.keys(PLAT).filter((p) => S.platforms.has(p));
   const max = Math.max(1, ...months.map((m) => plats.reduce((a, p) => a + m[p], 0)));
   const step = niceStep(max / 4), top = Math.ceil(max / step) * step;
@@ -554,7 +592,9 @@ function bind(list) {
   }));
   document.querySelectorAll('[data-month]').forEach((r) => r.addEventListener('click', () => { S.period = 'month'; S.month = r.dataset.month; S.page = 0; render(); }));
   on('#q', 'input', (e) => { S.q = e.target.value; S.page = 0; renderContents(list); bindTable(list); });
-  on('#csv', 'click', () => downloadCsv(sortedContents(list)));
+  on('#csv', 'click', () => exportDialog(list));
+  on('#exportBtn', 'click', () => exportDialog(list));
+  on('#tvBtn', 'click', tvDialog);
   on('#addBrand', 'click', () => brandDialog(null));
   on('#editBrand', 'click', () => brandDialog(S.brandMap.get(S.brandId)));
   on('#addLinks', 'click', linksDialog);
@@ -647,12 +687,354 @@ async function autoSync() {
   catch (e) { console.warn('Sheet sync failed', e); }
 }
 
-function downloadCsv(rows) {
-  const head = ['Brand', 'Platform', 'Link', 'Title', 'Posting date', 'Views', 'Likes', 'Comments', 'Shares', 'Saves', 'ER (%)', 'Source'];
+// ---------------------------------------------------------------- export (Excel, PDF, Word, PowerPoint, Markdown, CSV)
+const LIBS = {
+  xlsx: ['https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'],
+  pdf: ['https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', 'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'],
+  docx: ['https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js'],
+  pptx: ['https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js'],
+};
+const loaded = new Set();
+async function needLibs(kind) {
+  for (const src of LIBS[kind] || []) if (!loaded.has(src)) { await loadScript(src); loaded.add(src); }
+}
+const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+function saveBlob(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+// Semua angka laporan, mengikuti filter yang sedang aktif (brand, periode, platform, pencarian).
+function reportData(list) {
+  const brand = S.brandMap.get(S.brandId);
+  const range = periodRange();
+  const plats = Object.keys(PLAT).filter((p) => S.platforms.has(p));
+  const sum = summarize(list);
+  const target = brand ? brand.views_target : null;
+  const statRow = (s) => [s.n, s.views, s.likes, s.comments, s.shares, s.saves, s.er, s.hit];
+  const contents = sortedContents(list);
+  const meta = {
+    title: brand ? brand.name : 'All Brands',
+    period: range ? `${dateLabel(range[0] === '0000-01-01' ? null : range[0])} – ${dateLabel(range[1] === '9999-12-31' ? null : range[1])}` : 'All time',
+    platforms: plats.length === Object.keys(PLAT).length ? 'All platforms' : plats.map((p) => PLAT[p]).join(', '),
+    generated: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+    target: brand ? `${nf.format(target)} views per content` : 'Set per brand',
+    search: S.q.trim(),
+  };
+  const hitLabel = brand ? `Contents with ${cf.format(target)}+ views` : 'Contents hitting views target';
+  return {
+    meta,
+    file: `xander-${slug(meta.title)}-${slug(meta.period === 'All time' ? 'all-time' : range[0] + '-' + range[1])}-${todayKey()}`,
+    kpis: [
+      ['Total Views', sum.views, 'int'], ['Contents', sum.n, 'int'], ['Likes', sum.likes, 'int'], ['Comments', sum.comments, 'int'],
+      ['Shares', sum.shares, 'int'], ['Saves', sum.saves, 'int'], ['Engagement Rate', sum.er, 'pct'],
+      [hitLabel, sum.hit, 'int', sum.withData ? `${nf.format(sum.hit)} of ${nf.format(sum.withData)} (${pct(sum.hit / sum.withData)})` : '0'],
+    ],
+    statHead: ['Contents', 'Views', 'Likes', 'Comments', 'Shares', 'Saves', 'ER', 'Hit Target'],
+    monthly: byMonth(list).filter((m) => m.items.length).reverse().map((m) => [monthLabel(m.ym), ...statRow(summarize(m.items))]),
+    monthlyByPlatform: byMonth(list).slice(-12).map((m) => ({ label: monthLabel(m.ym), ...Object.fromEntries(plats.map((p) => [p, m[p]])) })),
+    plats,
+    brands: S.brandId === 'all' ? S.brands.map((b) => [b.name, ...statRow(summarize(list.filter((c) => c.brand_id === b.id)))]).filter((r) => r[1]).sort((a, z) => z[2] - a[2]) : null,
+    contentHead: ['Brand', 'Platform', 'Title', 'Link', 'Posted', 'Views', 'Likes', 'Comments', 'Shares', 'Saves', 'ER', 'Source'],
+    contents: contents.map((c) => [S.brandMap.get(c.brand_id)?.name || '', PLAT[c.platform], c.title || '', c.url, dayKey(c.posted_at) || '', c.views, c.likes, c.comments, c.shares, c.saves, erOf(c),
+      { auto: 'Live', sheet: 'Sheet', manual: 'Manual', none: '' }[c.source] || '']),
+    top: [...list].filter((c) => c.views !== null && c.views !== undefined).sort((a, z) => z.views - a.views).slice(0, 10),
+  };
+}
+const fmtCell = (v, kind) => (v === null || v === undefined || v === '' ? '–' : kind === 'pct' ? pct(v) : typeof v === 'number' ? nf.format(v) : String(v));
+const statText = (r) => r.map((v, i) => fmtCell(v, i === 7 ? 'int' : i === 6 ? 'pct' : 'int'));
+const contentText = (r) => r.map((v, i) => (i === 10 ? fmtCell(v, 'pct') : i >= 5 && i <= 9 ? fmtCell(v) : v || '–'));
+const kpiText = (k) => (k[3] !== undefined ? k[3] : fmtCell(k[1], k[2]));
+const metaLines = (d) => [['Period (posting date)', d.meta.period], ['Platforms', d.meta.platforms], ['Views target', d.meta.target], ...(d.meta.search ? [['Search filter', d.meta.search]] : []), ['Generated', d.meta.generated]];
+
+// ---- Excel
+async function exportXlsx(d) {
+  await needLibs('xlsx');
+  const X = window.XLSX, wb = X.utils.book_new();
+  const sheet = (rows, widths, pctCols = []) => {
+    const ws = X.utils.aoa_to_sheet(rows);
+    ws['!cols'] = widths.map((w) => ({ wch: w }));
+    const r = X.utils.decode_range(ws['!ref']);
+    for (let R = r.s.r; R <= r.e.r; R++) for (let C = r.s.c; C <= r.e.c; C++) {
+      const cell = ws[X.utils.encode_cell({ r: R, c: C })];
+      if (cell && cell.t === 'n') cell.z = pctCols.includes(C) ? '0.00%' : '#,##0';
+    }
+    return ws;
+  };
+  const summary = [[`Content Performance Report — ${d.meta.title}`], ['Xander Creative Agency'], [], ...metaLines(d), [], ['Metric', 'Value'],
+    ...d.kpis.map((k) => [k[0], k[2] === 'pct' ? k[1] : k[1]]), ...(d.kpis[7][3] ? [['Hit rate', d.kpis[7][3]]] : [])];
+  const ws1 = sheet(summary, [34, 40]);
+  const erRow = summary.findIndex((r) => r[0] === 'Engagement Rate');
+  if (erRow >= 0 && ws1[X.utils.encode_cell({ r: erRow, c: 1 })]) ws1[X.utils.encode_cell({ r: erRow, c: 1 })].z = '0.00%';
+  X.utils.book_append_sheet(wb, ws1, 'Summary');
+  X.utils.book_append_sheet(wb, sheet([['Posting Month', ...d.statHead], ...d.monthly], [16, 10, 14, 12, 12, 12, 12, 9, 11], [7]), 'Monthly');
+  if (d.brands) X.utils.book_append_sheet(wb, sheet([['Brand', ...d.statHead], ...d.brands], [28, 10, 14, 12, 12, 12, 12, 9, 11], [7]), 'Brands');
+  X.utils.book_append_sheet(wb, sheet([d.contentHead, ...d.contents], [22, 10, 50, 50, 12, 12, 10, 10, 10, 10, 9, 8], [10]), 'Contents');
+  X.writeFile(wb, d.file + '.xlsx');
+}
+
+// ---- PDF
+async function exportPdf(d) {
+  await needLibs('pdf');
+  const doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  const clean = (s) => String(s).replace(/[–—]/g, '-').replace(/[^\x20-\x7E -ÿ]/g, '');
+  const W = doc.internal.pageSize.getWidth(), M = 36;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text(clean(`Content Performance Report - ${d.meta.title}`), M, 48);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90);
+  doc.text(clean(metaLines(d).map(([k, v]) => `${k}: ${v}`).join('   |   ')), M, 66, { maxWidth: W - 2 * M });
+  doc.setTextColor(0);
+  const opts = { margin: { left: M, right: M }, styles: { fontSize: 8, cellPadding: 4 }, headStyles: { fillColor: [29, 79, 168] }, theme: 'striped' };
+  const heading = (t, y) => { doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text(t, M, y); doc.setFont('helvetica', 'normal'); return y + 8; };
+  const next = () => doc.lastAutoTable.finalY + 28;
+  doc.autoTable({ ...opts, startY: 84, head: [d.kpis.map((k) => clean(k[0]))], body: [d.kpis.map((k) => clean(kpiText(k)))], styles: { fontSize: 9, cellPadding: 6 } });
+  const numRight = (from) => Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i + from, { halign: 'right' }]));
+  doc.autoTable({ ...opts, startY: heading('Performance by Posting Month', next()), head: [['Posting Month', ...d.statHead]], body: d.monthly.map((r) => [r[0], ...statText(r.slice(1))]), columnStyles: numRight(1) });
+  if (d.brands) doc.autoTable({ ...opts, startY: heading('Brand Comparison', next()), head: [['Brand', ...d.statHead]], body: d.brands.map((r) => [clean(r[0]), ...statText(r.slice(1))]), columnStyles: numRight(1) });
+  doc.addPage();
+  doc.autoTable({ ...opts, startY: heading(`Content List (${nf.format(d.contents.length)})`, 40),
+    head: [['Brand', 'Platform', 'Title', 'Posted', 'Views', 'Likes', 'Comments', 'Shares', 'Saves', 'ER']],
+    body: d.contents.map((r) => { const t = contentText(r); return [clean(t[0]), t[1], clean(String(r[2] || r[3]).slice(0, 70)), t[4], ...t.slice(5, 11)]; }),
+    columnStyles: { 2: { cellWidth: 230 }, ...Object.fromEntries([4, 5, 6, 7, 8, 9].map((i) => [i, { halign: 'right' }])) } });
+  const pages = doc.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) { doc.setPage(i); doc.setFontSize(8); doc.setTextColor(130); doc.text(`Xander Creative Agency  ·  Page ${i} of ${pages}`.replace('·', '-'), M, doc.internal.pageSize.getHeight() - 18); }
+  doc.save(d.file + '.pdf');
+}
+
+// ---- Word
+async function exportDocx(d) {
+  await needLibs('docx');
+  const D = window.docx;
+  const cell = (t, opts = {}) => new D.TableCell({ children: [new D.Paragraph({ alignment: opts.right ? D.AlignmentType.RIGHT : D.AlignmentType.LEFT, children: [new D.TextRun({ text: String(t), bold: !!opts.bold, size: 17, color: opts.head ? 'FFFFFF' : undefined })] })],
+    shading: opts.head ? { fill: '1D4FA8', type: D.ShadingType.CLEAR, color: 'auto' } : undefined, margins: { top: 50, bottom: 50, left: 80, right: 80 } });
+  const table = (head, rows, rightFrom = 1) => new D.Table({ width: { size: 100, type: D.WidthType.PERCENTAGE },
+    rows: [new D.TableRow({ tableHeader: true, children: head.map((h, i) => cell(h, { head: true, bold: true, right: i >= rightFrom })) }),
+      ...rows.map((r) => new D.TableRow({ children: r.map((v, i) => cell(v, { right: i >= rightFrom })) }))] });
+  const h = (t) => new D.Paragraph({ text: t, heading: D.HeadingLevel.HEADING_2, spacing: { before: 320, after: 120 } });
+  const top = d.contents.slice(0, 50);
+  const children = [
+    new D.Paragraph({ text: `Content Performance Report — ${d.meta.title}`, heading: D.HeadingLevel.TITLE }),
+    new D.Paragraph({ children: [new D.TextRun({ text: 'Xander Creative Agency', color: '666666' })], spacing: { after: 200 } }),
+    ...metaLines(d).map(([k, v]) => new D.Paragraph({ children: [new D.TextRun({ text: `${k}: `, bold: true }), new D.TextRun(v)] })),
+    h('Key Metrics'), table(['Metric', 'Value'], d.kpis.map((k) => [k[0], kpiText(k)])),
+    h('Performance by Posting Month'), table(['Posting Month', ...d.statHead], d.monthly.map((r) => [r[0], ...statText(r.slice(1))])),
+    ...(d.brands ? [h('Brand Comparison'), table(['Brand', ...d.statHead], d.brands.map((r) => [r[0], ...statText(r.slice(1))]))] : []),
+    h(d.contents.length > top.length ? `Contents (first ${top.length} of ${nf.format(d.contents.length)}, in dashboard order)` : 'Contents'),
+    table(['Brand', 'Platform', 'Title', 'Posted', 'Views', 'Likes', 'Comments', 'Shares', 'Saves', 'ER'],
+      top.map((r) => { const t = contentText(r); return [t[0], t[1], String(r[2] || r[3]).slice(0, 80), t[4], ...t.slice(5, 11)]; }), 4),
+    ...(d.contents.length > top.length ? [new D.Paragraph({ children: [new D.TextRun({ text: 'The full content list is available in the Excel or CSV export.', italics: true, color: '666666' })], spacing: { before: 120 } })] : []),
+  ];
+  const doc = new D.Document({ creator: 'Xander Creative Agency', title: `Content Performance — ${d.meta.title}`,
+    styles: { default: { document: { run: { font: 'Calibri', size: 20 } } } },
+    sections: [{ properties: { page: { size: { orientation: D.PageOrientation.LANDSCAPE }, margin: { top: 720, bottom: 720, left: 720, right: 720 } } }, children }] });
+  saveBlob(await D.Packer.toBlob(doc), d.file + '.docx');
+}
+
+// ---- PowerPoint
+async function exportPptx(d) {
+  await needLibs('pptx');
+  const pptx = new window.PptxGenJS();
+  pptx.layout = 'LAYOUT_WIDE'; pptx.author = 'Xander Creative Agency'; pptx.title = `Content Performance — ${d.meta.title}`;
+  const INK = '1F2937', MUTED = '6B7280', ACCENT = '1D4FA8';
+  const COLORS = { tiktok: '2A78D6', instagram: 'EB6834', youtube: '1BAF7A' };
+  const title = (s, t, sub) => { s.addText(t, { x: 0.5, y: 0.35, w: 12.3, h: 0.6, fontSize: 26, bold: true, color: INK, fontFace: 'Calibri' });
+    if (sub) s.addText(sub, { x: 0.5, y: 0.95, w: 12.3, h: 0.35, fontSize: 12, color: MUTED, fontFace: 'Calibri' }); };
+  const tbl = (s, head, rows, y, colW) => s.addTable([head.map((h) => ({ text: h, options: { bold: true, color: 'FFFFFF', fill: { color: ACCENT } } })), ...rows.map((r) => r.map((v) => (v && typeof v === 'object' ? v : { text: String(v) })))],
+    { x: 0.5, y, w: 12.3, ...(colW ? { colW } : {}), fontSize: 10, fontFace: 'Calibri', color: INK, border: { type: 'solid', pt: 0.5, color: 'D1D5DB' }, autoPage: true, autoPageRepeatHeader: true, newSlideStartY: 0.6 });
+  const sub = `${d.meta.period} · ${d.meta.platforms}`;
+
+  let s = pptx.addSlide();
+  s.addText('Content Performance Report', { x: 0.7, y: 2.2, w: 12, h: 0.8, fontSize: 36, bold: true, color: INK, fontFace: 'Calibri' });
+  s.addText(d.meta.title, { x: 0.7, y: 3.0, w: 12, h: 0.6, fontSize: 24, color: ACCENT, fontFace: 'Calibri' });
+  s.addText(`${sub}\nGenerated ${d.meta.generated} · Xander Creative Agency`, { x: 0.7, y: 3.8, w: 12, h: 0.8, fontSize: 14, color: MUTED, fontFace: 'Calibri' });
+
+  s = pptx.addSlide(); title(s, 'Key Metrics', sub);
+  d.kpis.forEach((k, i) => {
+    const x = 0.5 + (i % 4) * 3.1, y = 1.6 + Math.floor(i / 4) * 2.4;
+    s.addShape(pptx.ShapeType.roundRect, { x, y, w: 2.9, h: 2.1, fill: { color: 'F3F4F6' }, line: { color: 'E5E7EB' }, rectRadius: 0.08 });
+    s.addText(k[0], { x: x + 0.2, y: y + 0.2, w: 2.5, h: 0.5, fontSize: 12, color: MUTED, fontFace: 'Calibri' });
+    s.addText(k[2] === 'pct' ? pct(k[1]) : k[1] >= 100000 ? cf.format(k[1]) : nf.format(k[1]), { x: x + 0.2, y: y + 0.75, w: 2.5, h: 0.8, fontSize: 30, bold: true, color: INK, fontFace: 'Calibri' });
+    if (k[3]) s.addText(k[3], { x: x + 0.2, y: y + 1.5, w: 2.5, h: 0.4, fontSize: 10, color: MUTED, fontFace: 'Calibri' });
+  });
+
+  if (d.monthlyByPlatform.length) {
+    s = pptx.addSlide(); title(s, 'Views by Posting Month', `Last ${d.monthlyByPlatform.length} months · ${d.meta.platforms}`);
+    s.addChart(pptx.ChartType.bar, d.plats.map((p) => ({ name: PLAT[p], labels: d.monthlyByPlatform.map((m) => m.label), values: d.monthlyByPlatform.map((m) => m[p] || 0) })),
+      { x: 0.5, y: 1.5, w: 12.3, h: 5.6, barGrouping: 'stacked', chartColors: d.plats.map((p) => COLORS[p]), showLegend: true, legendPos: 'b',
+        valAxisLabelFormatCode: '#,##0', catAxisLabelFontSize: 10, valAxisLabelFontSize: 10, legendFontSize: 11, valGridLine: { color: 'E5E7EB', size: 0.5 } });
+  }
+  s = pptx.addSlide(); title(s, 'Performance by Posting Month', sub);
+  tbl(s, ['Posting Month', ...d.statHead], d.monthly.slice(0, 12).map((r) => [r[0], ...statText(r.slice(1))]), 1.5);
+  if (d.brands) { s = pptx.addSlide(); title(s, 'Brand Comparison', sub); tbl(s, ['Brand', ...d.statHead], d.brands.map((r) => [r[0], ...statText(r.slice(1))]), 1.5); }
+  if (d.top.length) {
+    s = pptx.addSlide(); title(s, 'Top 10 Contents by Views', sub);
+    tbl(s, ['Brand', 'Platform', 'Title', 'Posted', 'Views', 'Likes', 'ER'], d.top.map((c) => [S.brandMap.get(c.brand_id)?.name || '', PLAT[c.platform],
+      { text: String(c.title || c.url).slice(0, 60), options: { hyperlink: { url: c.url } } }, dateLabel(dayKey(c.posted_at)), nf.format(c.views), fmtCell(c.likes), pct(erOf(c))]), 1.5, [2.2, 1.0, 4.6, 1.4, 1.2, 1.0, 0.9]);
+  }
+  await pptx.writeFile({ fileName: d.file + '.pptx' });
+}
+
+// ---- Markdown & CSV
+function exportMd(d) {
+  const esc2 = (v) => String(v).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const mdTable = (head, rows) => [`| ${head.join(' | ')} |`, `| ${head.map((_, i) => (i ? '---:' : '---')).join(' | ')} |`, ...rows.map((r) => `| ${r.map(esc2).join(' | ')} |`)].join('\n');
+  const out = [`# Content Performance Report — ${d.meta.title}`, '', '_Xander Creative Agency_', '', ...metaLines(d).map(([k, v]) => `- **${k}:** ${v}`), '',
+    '## Key Metrics', '', mdTable(['Metric', 'Value'], d.kpis.map((k) => [k[0], kpiText(k)])), '',
+    '## Performance by Posting Month', '', mdTable(['Posting Month', ...d.statHead], d.monthly.map((r) => [r[0], ...statText(r.slice(1))])), ''];
+  if (d.brands) out.push('## Brand Comparison', '', mdTable(['Brand', ...d.statHead], d.brands.map((r) => [r[0], ...statText(r.slice(1))])), '');
+  out.push(`## Contents (${nf.format(d.contents.length)})`, '', mdTable(['Brand', 'Platform', 'Title', 'Posted', 'Views', 'Likes', 'Comments', 'Shares', 'Saves', 'ER'],
+    d.contents.map((r) => { const t = contentText(r); return [t[0], t[1], `[${String(r[2] || r[3]).slice(0, 80).replace(/[[\]]/g, '')}](${r[3]})`, t[4], ...t.slice(5, 11)]; })), '');
+  saveBlob(new Blob([out.join('\n')], { type: 'text/markdown' }), d.file + '.md');
+}
+function exportCsv(d) {
   const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const lines = rows.map((c) => [S.brandMap.get(c.brand_id)?.name, PLAT[c.platform], c.url, c.title, dayKey(c.posted_at), c.views, c.likes, c.comments, c.shares, c.saves, erOf(c) === null ? '' : (erOf(c) * 100).toFixed(2), c.source].map(q).join(','));
-  const blob = new Blob(['﻿' + [head.map(q).join(','), ...lines].join('\n')], { type: 'text/csv' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `contents-${todayKey()}.csv`; a.click();
+  const lines = d.contents.map((r) => r.map((v, i) => (i === 10 ? (v === null ? '' : (v * 100).toFixed(2)) : v)).map(q).join(','));
+  const head = d.contentHead.map((h) => (h === 'ER' ? 'ER (%)' : h));
+  saveBlob(new Blob(['﻿' + [head.map(q).join(','), ...lines].join('\n')], { type: 'text/csv' }), d.file + '.csv');
+}
+
+const EXPORTS = [
+  ['xlsx', 'Excel (.xlsx)', 'Summary, monthly, brand and full content sheets', exportXlsx],
+  ['pdf', 'PDF', 'Print-ready report with every table', exportPdf],
+  ['docx', 'Word (.docx)', 'Editable report; top 50 contents', exportDocx],
+  ['pptx', 'PowerPoint (.pptx)', 'Client-ready slides with chart and top 10', exportPptx],
+  ['md', 'Markdown (.md)', 'Plain-text report for Notion, docs or chat', exportMd],
+  ['csv', 'CSV', 'Raw content list for any tool', exportCsv],
+];
+function exportDialog(list) {
+  const d0 = reportData(list);
+  const d = dialog(`<h3>Export Report</h3>
+    <div class="hint">Exports what is shown now: <b>${esc(d0.meta.title)}</b> · ${esc(d0.meta.period)} · ${esc(d0.meta.platforms)}${d0.meta.search ? ` · search “${esc(d0.meta.search)}”` : ''} · ${nf.format(d0.contents.length)} contents.</div>
+    <div class="exports">${EXPORTS.map(([k, l, desc]) => `<button class="btn export" value="${k}"><b>${l}</b><span>${desc}</span></button>`).join('')}</div>
+    <div class="foot"><span></span><span><button class="btn" value="cancel" formnovalidate>Close</button></span></div>`,
+  async (fd, action, dlg) => {
+    const ex = EXPORTS.find((e) => e[0] === action);
+    if (!ex) return;
+    dlg.querySelectorAll('button').forEach((b) => (b.disabled = true));
+    toast(`Preparing ${ex[1]}…`);
+    try { await ex[3](d0); toast(`${ex[1]} downloaded.`); }
+    finally { dlg.querySelectorAll('button').forEach((b) => (b.disabled = false)); }
+    return false;
+  });
+  return d;
+}
+
+
+// ---------------------------------------------------------------- TV mode (layar TV / monitor kantor)
+// Bisa dibuka langsung lewat link, mis. …/index.html?tv=1&rotate=30&period=this
+const TV = { on: false, rotate: 0, seq: [], idx: 0, timer: null, clock: null, started: 0, pointerTimer: null };
+const PERIOD_KEYS = ['all', 'this', 'last', '30', '90', 'year'];
+function tvLink(brand, rotate) {
+  const u = new URL(location.href.split('?')[0]);
+  u.searchParams.set('tv', '1');
+  if (rotate) u.searchParams.set('rotate', String(rotate)); else if (brand && brand !== 'all') u.searchParams.set('brand', S.brandMap.get(brand)?.name || '');
+  if (S.period !== 'all' && PERIOD_KEYS.includes(S.period)) u.searchParams.set('period', S.period);
+  const plats = Object.keys(PLAT).filter((p) => S.platforms.has(p));
+  if (plats.length === 1) u.searchParams.set('platform', plats[0]);
+  return u.toString();
+}
+function tvDialog() {
+  const brands = [...S.brands].sort((a, b) => a.name.localeCompare(b.name, 'en'));
+  const d = dialog(`<h3>TV Mode</h3>
+    <div class="hint">A full-screen view for an office TV or monitor. Numbers refresh automatically every 3 minutes. Uses the current period and platform filter.</div>
+    <label>Show<select name="what">
+      <option value="rotate">Rotate: All Brands, then each brand</option>
+      <option value="all" ${S.brandId === 'all' ? 'selected' : ''}>All Brands only</option>
+      ${brands.map((b) => `<option value="${b.id}" ${S.brandId === b.id ? 'selected' : ''}>${esc(b.name)} only</option>`).join('')}
+    </select></label>
+    <label>Seconds per screen (rotation)<select name="sec">${[15, 30, 60, 120].map((n) => `<option ${n === 30 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+    <label>Link for the TV (open it once in the TV browser and bookmark it)<input name="link" readonly></label>
+    <div class="foot"><span><button class="btn" value="copy" type="button" id="tvCopy">Copy link</button></span><span><button class="btn" value="cancel" formnovalidate>Cancel</button> <button class="btn primary" value="start">Start TV Mode</button></span></div>`,
+  async (fd) => {
+    const what = fd.get('what'), sec = +fd.get('sec');
+    startTv(what === 'rotate' ? 'all' : what, what === 'rotate' ? sec : 0, true);
+    return false;
+  });
+  const upd = () => { $('input[name=link]', d).value = tvLink($('select[name=what]', d).value === 'rotate' ? 'all' : $('select[name=what]', d).value, $('select[name=what]', d).value === 'rotate' ? +$('select[name=sec]', d).value : 0); };
+  $('select[name=what]', d).addEventListener('change', upd); $('select[name=sec]', d).addEventListener('change', upd); upd();
+  $('#tvCopy', d).addEventListener('click', async () => { try { await navigator.clipboard.writeText($('input[name=link]', d).value); toast('Link copied.'); } catch { $('input[name=link]', d).select(); } });
+}
+function startTv(brandId, rotate, fullscreen) {
+  document.querySelector('dialog[open]')?.close();
+  Object.assign(TV, { on: true, rotate, idx: 0 });
+  S.brandId = brandId; S.q = '';
+  tvSequence();
+  if (fullscreen && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+  clearInterval(TV.timer); clearInterval(TV.clock);
+  TV.started = Date.now();
+  if (rotate) TV.timer = setInterval(() => { tvSequence(); TV.idx = (TV.idx + 1) % TV.seq.length; S.brandId = TV.seq[TV.idx]; TV.started = Date.now(); render(); }, rotate * 1000);
+  TV.clock = setInterval(tvTick, 1000);
+  render();
+}
+function tvSequence() {
+  const views = new Map();
+  for (const c of S.contents) views.set(c.brand_id, (views.get(c.brand_id) || 0) + (c.views || 0));
+  TV.seq = ['all', ...S.brands.filter((b) => views.get(b.id)).sort((a, z) => views.get(z.id) - views.get(a.id)).map((b) => b.id)];
+}
+function stopTv() {
+  if (!TV.on) return;
+  TV.on = false; clearInterval(TV.timer); clearInterval(TV.clock);
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  if (new URL(location.href).searchParams.has('tv')) history.replaceState(null, '', location.pathname);
+  render();
+}
+function tvTick() {
+  const c = $('#tvClock'); if (!c) return;
+  const now = new Date();
+  c.innerHTML = `<b>${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</b><span>${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>`;
+  const bar = $('.tv-progress i');
+  if (bar && TV.rotate) bar.style.width = Math.min(100, ((Date.now() - TV.started) / (TV.rotate * 1000)) * 100) + '%';
+}
+function renderTv() {
+  const brand = S.brandMap.get(S.brandId), list = filtered(), sum = summarize(list);
+  const target = brand ? brand.views_target : null;
+  const range = periodRange();
+  const periodText = range ? `${dateLabel(range[0] === '0000-01-01' ? null : range[0])} – ${dateLabel(range[1] === '9999-12-31' ? null : range[1])}` : 'All time';
+  const plats = Object.keys(PLAT).filter((p) => S.platforms.has(p));
+  const cs = [S.settings.collector_status, S.settings.collector_heartbeat].filter((x) => x?.at).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
+  const big = (v) => (v >= 100000 ? cf.format(v) : nf.format(v));
+  const k = (label, val, note = '') => `<div class="tile"><div class="lab">${label}</div><div class="val">${val}</div><div class="note">${note}</div></div>`;
+  let side;
+  if (!brand) {
+    const rows = S.brands.map((b) => ({ b, s: summarize(list.filter((c) => c.brand_id === b.id)) })).filter((r) => r.s.n).sort((a, z) => z.s.views - a.s.views).slice(0, 8);
+    side = `<header><h2>Top Brands by Views</h2></header><ol class="tv-list">${rows.map((r, i) => `<li><span class="rank">${i + 1}</span><span class="name">${esc(r.b.name)}<small>${nf.format(r.s.n)} contents · ER ${pct(r.s.er)}</small></span><span class="v">${big(r.s.views)}<small>${r.s.hit} hit target</small></span></li>`).join('')}</ol>`;
+  } else {
+    const top = list.filter((c) => c.views !== null && c.views !== undefined).sort((a, z) => z.views - a.views).slice(0, 6);
+    side = `<header><h2>Top Contents by Views</h2></header><ol class="tv-list">${top.map((c, i) => `<li><span class="rank">${i + 1}</span><span class="name">${esc(c.title || c.url.replace(/^https:\/\/(www\.)?/, ''))}<small><i class="dot" style="background:var(--${c.platform})"></i> ${PLAT[c.platform]} · ${dateLabel(dayKey(c.posted_at))}</small></span><span class="v">${big(c.views)}<small>ER ${pct(erOf(c))}</small></span></li>`).join('') || '<li><span></span><span class="name">No contents yet</span><span></span></li>'}</ol>`;
+  }
+  $('#root').innerHTML = `<div class="tv" id="tv">
+    <div class="tv-head"><div><h1>${esc(brand ? brand.name : 'All Brands')}</h1>
+      <div class="sub">${periodText} · ${plats.length === 3 ? 'All Platforms' : plats.map((p) => PLAT[p]).join(', ')}${brand ? ` · Views target ${nf.format(target)}` : ` · ${S.brands.length} brands`}${cs?.at ? ` · Data updated ${ago(cs.at)}` : ''}</div></div>
+      <div class="tv-clock" id="tvClock"></div></div>
+    <div class="tv-kpis">
+      ${k('Total Views', big(sum.views))}${k('Contents', nf.format(sum.n))}${k('Likes', big(sum.likes))}${k('Comments', big(sum.comments))}
+      ${k('Shares', big(sum.shares))}${k('Saves', big(sum.saves))}${k('Engagement Rate', pct(sum.er))}
+      ${k(brand ? `≥ ${cf.format(target)} Views` : '≥ Views Target', `${nf.format(sum.hit)}`, sum.withData ? `${pct(sum.hit / sum.withData)} of contents` : '')}
+    </div>
+    <div class="tv-body">
+      <section class="card"><header><h2>Views by Posting Month</h2><div class="legend">${plats.map((p) => `<span><i class="dot" style="background:var(--${p})"></i>${PLAT[p]}</span>`).join('')}</div></header><div class="chartwrap" id="chart"></div></section>
+      <section class="card">${side}</section>
+    </div>
+    <div class="tv-foot"><span>XANDER CREATIVE · Content Performance</span>
+      <span>${TV.rotate ? `Screen ${TV.idx + 1} of ${TV.seq.length} · next in ${TV.rotate}s` : ''}</span>
+      ${TV.rotate ? '<div class="tv-progress"><i></i></div>' : '<span></span>'}</div>
+    <button class="btn tv-exit" id="tvExit">✕ Exit TV Mode</button>
+  </div>`;
+  const months = byMonth(list);
+  renderChart(months.length > 12 ? list.filter((c) => dayKey(c.posted_at) >= months[months.length - 12].ym) : list);
+  $('#tvExit').onclick = stopTv;
+  const tv = $('#tv');
+  tv.onmousemove = () => { tv.classList.add('pointer'); clearTimeout(TV.pointerTimer); TV.pointerTimer = setTimeout(() => tv.classList.remove('pointer'), 3000); };
+  tvTick();
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && TV.on && !document.fullscreenElement) stopTv(); });
+function tvFromUrl() {
+  const q = new URL(location.href).searchParams;
+  if (q.get('tv') !== '1') return;
+  if (PERIOD_KEYS.includes(q.get('period'))) S.period = q.get('period');
+  if (PLAT[q.get('platform')]) S.platforms = new Set([q.get('platform')]);
+  const b = q.get('brand') && S.brands.find((x) => x.name.toLowerCase() === q.get('brand').toLowerCase());
+  const rotate = Math.max(0, Math.min(600, +q.get('rotate') || 0));
+  startTv(b ? b.id : 'all', b ? 0 : rotate, false);
 }
 
 // ---------------------------------------------------------------- dialogs
@@ -806,7 +1188,7 @@ async function start() {
       $('#out').onclick = async () => { await DB.sb.auth.signOut(); location.reload(); };
       return;
     }
-    Object.assign(S, await DB.load()); render(); autoSync();
+    Object.assign(S, await DB.load()); render(); tvFromUrl(); autoSync();
   }
   catch (e) { $('#root').innerHTML = `<div class="empty">Could not load data: ${esc(e.message)}</div>`; }
 }
@@ -822,7 +1204,7 @@ setInterval(async () => {
   if (!LIVE || !DB.sb || !S.brandMap || document.querySelector('dialog[open], #login') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
   try { Object.assign(S, await DB.load()); render(); } catch {}
 }, 180000);
-let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if ($('#chart')) renderChart(filtered()); }, 150); });
+let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (TV.on) render(); else if ($('#chart')) renderChart(filtered()); }, 150); });
 </script>
 </body>
 </html>

@@ -34,6 +34,15 @@ per brand, sepanjang waktu, per bulan posting, atau rentang tanggal bebas.
   Keduanya hanya bisa ditulis dari dashboard, tidak bisa dibaca kembali.
 - Bagian Instagram bersifat eksperimental dan belum teruji dengan akun sungguhan.
 
+## Export dan TV Mode
+
+- **⤓ Export** (kanan atas dan di atas daftar konten): unduh tampilan yang sedang aktif (brand, periode, platform,
+  pencarian) sebagai Excel, PDF, Word, PowerPoint, Markdown, atau CSV.
+- **▣ TV Mode**: tampilan layar penuh untuk TV/monitor kantor, bisa bergiliran antar brand. Link khusus TV, mis.
+  `https://xandercreativeid-blip.github.io/xander-dashboard/?tv=1&rotate=30`
+  (`rotate` = detik per layar; `brand=Nama Brand` untuk satu brand; `period=this|last|30|90|year`;
+  `platform=tiktok|instagram|youtube`).
+
 ## Akses
 
 Siapa pun bisa membuat akun di halaman login, tetapi hanya email yang ada di daftar **Anggota tim**
