@@ -49,7 +49,7 @@ per brand, sepanjang waktu, per bulan posting, atau rentang tanggal bebas.
   pencarian) sebagai Excel, PDF, Word, PowerPoint, Markdown, atau CSV.
 - **▣ TV Mode**: tampilan layar penuh untuk TV/monitor kantor, bisa bergiliran antar brand. Link khusus TV, mis.
   `https://xandercreativeid-blip.github.io/xander-dashboard/?tv=1&rotate=30`
-  (`rotate` = detik per layar; `brand=Nama Brand` untuk satu brand; `period=this|last|30|90|year`;
+  (`rotate` = detik per layar; `brand=Nama Brand` untuk satu brand; `period=this|last|7|14|30|90|year`;
   `platform=tiktok|instagram|youtube`).
 
 ## Akses
