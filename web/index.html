@@ -61,7 +61,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 11px; display: inline-flex; align-items: center; gap: 6px; }
-.chip[aria-pressed=false] { opacity: .55; }
+.chip:hover { border-color: var(--text-3); }
+.chip[aria-pressed=true] { background: var(--text); color: var(--surface); border-color: var(--text); }
 .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
@@ -327,6 +328,8 @@ function render() {
   const target = brand ? brand.views_target : null;
   const range = periodRange();
   const periodText = range ? `${dateLabel(range[0] === '0000-01-01' ? null : range[0])} – ${dateLabel(range[1] === '9999-12-31' ? null : range[1])}` : 'Semua waktu';
+  const manualPl = ['instagram', 'youtube'].filter((p) => S.platforms.has(p)).map((p) => PLAT[p]);
+  const manualNote = !manualPl.length ? 'otomatis dari TikTok' : manualPl.length === 2 && S.platforms.has('tiktok') ? 'IG &amp; YouTube: input manual dari Sheet' : manualPl.join(' &amp; ') + ': input manual dari Sheet';
   const cs = [S.settings.collector_status, S.settings.collector_heartbeat].filter((x) => x?.at).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
 
   $('#root').innerHTML = `
@@ -369,7 +372,8 @@ function render() {
         ${S.period === 'month' ? `<input type="month" id="month" value="${S.month}" aria-label="Bulan">` : ''}
         ${S.period === 'range' ? `<input type="date" id="from" value="${S.from}" aria-label="Dari tanggal"><span>s.d.</span><input type="date" id="to" value="${S.to}" aria-label="Sampai tanggal">` : ''}
         <div class="chips" role="group" aria-label="Platform">
-          ${Object.entries(PLAT).map(([k, l]) => `<button class="chip" data-plat="${k}" aria-pressed="${S.platforms.has(k)}"><i class="dot" style="background:var(--${k})"></i>${l}</button>`).join('')}
+          <button class="chip" data-plat="all" aria-pressed="${S.platforms.size === Object.keys(PLAT).length}">All Platform</button>
+          ${Object.entries(PLAT).map(([k, l]) => `<button class="chip" data-plat="${k}" aria-pressed="${S.platforms.size === 1 && S.platforms.has(k)}"><i class="dot" style="background:var(--${k})"></i>${l}</button>`).join('')}
         </div>
         <span class="sub">Tanggal posting: ${periodText}</span>
       </div>
@@ -377,8 +381,8 @@ function render() {
         ${tile('Total Views', sum.views, `${nf.format(sum.n)} konten`, true)}
         ${tile('Likes', sum.likes)}
         ${tile('Komentar', sum.comments)}
-        ${tile('Shares', sum.shares, 'IG & YouTube tidak publik')}
-        ${tile('Saves', sum.saves, 'IG & YouTube tidak publik')}
+        ${tile('Shares', sum.shares, manualNote)}
+        ${tile('Saves', sum.saves, manualNote)}
         <div class="tile"><div class="lab">Engagement Rate</div><div class="val">${pct(sum.er)}</div><div class="note">interaksi ÷ views</div></div>
         <div class="tile"><div class="lab">Konten ≥ ${brand ? cf.format(target) + ' views' : 'target views'}</div><div class="val">${nf.format(sum.hit)}<span style="font-size:14px;font-weight:500;color:var(--text-3)"> / ${nf.format(sum.withData)}</span></div><div class="note">${sum.withData ? pct(sum.hit / sum.withData) + ' dari konten berdata' : ''}</div></div>
       </div>
@@ -526,7 +530,7 @@ function renderContents(list) {
       <td class="l title"><a href="${esc(c.url)}" target="_blank" rel="noopener" title="${esc(c.title || c.url)}">${esc(c.title || c.url.replace(/^https:\/\/(www\.)?/, ''))}</a></td>
       <td class="l num">${dateLabel(dayKey(c.posted_at))}</td>
       <td class="num">${fmt(c.views)}${c.views !== null && c.views >= targetOf(c) ? ' <span class="badge good" title="Mencapai target views">✓</span>' : ''}</td>
-      <td class="num">${fmt(c.likes)}</td><td class="num">${fmt(c.comments)}</td><td class="num">${fmt(c.shares)}</td><td class="num">${fmt(c.saves)}</td>
+      <td class="num">${fmt(c.likes)}</td><td class="num">${fmt(c.comments)}</td>${['shares', 'saves'].map((k) => c.platform === 'tiktok' ? `<td class="num">${fmt(c[k])}</td>` : `<td class="num" title="Input manual dari Sheet / tombol ✎">${fmt(c[k])}<sup style="color:var(--text-3)"> m</sup></td>`).join('')}
       <td class="num">${pct(erOf(c))}</td>
       <td class="l">${statusBadge(c)}</td>
       <td><button class="btn ghost" data-act="refresh" data-id="${c.id}" title="Refresh konten ini" aria-label="Refresh">↻</button><button class="btn ghost" data-act="edit" data-id="${c.id}" title="Isi / ubah angka manual" aria-label="Ubah">✎</button></td>
@@ -545,8 +549,8 @@ function bind(list) {
   on('#from', 'change', (e) => { S.from = e.target.value; S.page = 0; render(); });
   on('#to', 'change', (e) => { S.to = e.target.value; S.page = 0; render(); });
   document.querySelectorAll('[data-plat]').forEach((b) => b.addEventListener('click', () => {
-    const p = b.dataset.plat; S.platforms.has(p) ? S.platforms.delete(p) : S.platforms.add(p);
-    if (!S.platforms.size) S.platforms = new Set(Object.keys(PLAT));
+    const p = b.dataset.plat;
+    S.platforms = p === 'all' ? new Set(Object.keys(PLAT)) : new Set([p]);
     S.page = 0; render();
   }));
   document.querySelectorAll('[data-month]').forEach((r) => r.addEventListener('click', () => { S.period = 'month'; S.month = r.dataset.month; S.page = 0; render(); }));

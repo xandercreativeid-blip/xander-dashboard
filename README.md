@@ -18,8 +18,8 @@ per brand, sepanjang waktu, per bulan posting, atau rentang tanggal bebas.
 | | Views | Likes | Komentar | Shares | Saves |
 |---|---|---|---|---|---|
 | TikTok | ya | ya | ya | ya | ya |
-| YouTube Shorts | ya | ya | perlu API key | tidak publik | tidak publik |
-| Instagram Reels | perlu sesi akun IG | perlu sesi akun IG | perlu sesi akun IG | tidak publik | tidak publik |
+| YouTube Shorts | ya | ya | perlu API key | manual (Sheet) | manual (Sheet) |
+| Instagram Reels | perlu sesi akun IG | perlu sesi akun IG | perlu sesi akun IG | manual (Sheet) | manual (Sheet) |
 
 - Jadwal refresh otomatis menurut umur konten: < 7 hari tiap 8 jam; 7–30 hari tiap hari; 30–90 hari tiap
   minggu; > 90 hari tiap bulan. Tiap putaran 5 menit memproses ±35 konten TikTok.
