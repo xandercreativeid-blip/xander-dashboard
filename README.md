@@ -26,9 +26,10 @@ per brand, sepanjang waktu, per bulan posting, atau rentang tanggal bebas.
 - Tombol ↻ pada satu konten mengambil angkanya saat itu juga.
 - Konten yang belum/tidak bisa diambil otomatis memakai angka dari Google Sheets ("Dari Sheet") atau isian
   manual (tombol ✎).
-- Angka yang diperbarui manual di Google Sheets ikut tersinkron otomatis: semua angka untuk konten yang belum
-  bisa diambil otomatis (mis. Instagram), dan Shares/Saves untuk YouTube & Instagram. Untuk angka yang bisa
-  diambil langsung dari platform, data langsung yang dipakai.
+- Angka di macrosheets ikut tersinkron otomatis untuk semua platform (TikTok, Instagram, YouTube). Untuk tiap
+  metrik, dashboard menampilkan angka **tertinggi** antara macrosheets dan data langsung dari platform, karena
+  views/likes/dst. hanya bisa bertambah: angka yang lebih tinggi adalah yang lebih baru. Angka yang diisi lewat
+  tombol ✎ di dashboard selalu dipakai apa adanya.
 - YouTube API key dan sesi akun Instagram diisi dari dashboard: menu **Google Sheets & status**.
   Keduanya hanya bisa ditulis dari dashboard, tidak bisa dibaca kembali.
 - Bagian Instagram bersifat eksperimental dan belum teruji dengan akun sungguhan.

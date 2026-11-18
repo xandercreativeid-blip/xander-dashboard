@@ -106,3 +106,27 @@ grant execute on function private_config_status() to authenticated;
 -- $cron$);
 -- select cron.schedule('cleanup-http-responses', '17 3 * * *',
 --   $cron$ delete from net._http_response where created < now() - interval '1 day'; $cron$);
+
+-- ---------------------------------------------------------------------------
+-- Angka dari dua sumber: "live" (diambil langsung dari platform) dan "sheet" (macrosheets).
+-- Kolom views/likes/comments/shares/saves = angka tertinggi dari keduanya, per metrik.
+-- Konten yang diisi manual lewat dashboard (source = 'manual') tidak diubah.
+-- ---------------------------------------------------------------------------
+alter table contents add column if not exists live  jsonb;
+alter table contents add column if not exists sheet jsonb;
+
+create or replace function merge_metrics() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if new.source <> 'manual' and (new.live is not null or new.sheet is not null) then
+    new.views    := greatest((new.live ->> 'views')::bigint,    (new.sheet ->> 'views')::bigint);
+    new.likes    := greatest((new.live ->> 'likes')::bigint,    (new.sheet ->> 'likes')::bigint);
+    new.comments := greatest((new.live ->> 'comments')::bigint, (new.sheet ->> 'comments')::bigint);
+    new.shares   := greatest((new.live ->> 'shares')::bigint,   (new.sheet ->> 'shares')::bigint);
+    new.saves    := greatest((new.live ->> 'saves')::bigint,    (new.sheet ->> 'saves')::bigint);
+  end if;
+  return new;
+end $$;
+drop trigger if exists contents_merge_metrics on contents;
+create trigger contents_merge_metrics before insert or update on contents
+  for each row execute function merge_metrics();

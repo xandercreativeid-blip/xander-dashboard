@@ -124,8 +124,11 @@ async function saveResult(row: any, r: any) {
     return upd(row.id, { status: "unavailable", last_error: r.error, last_fetched_at: now, refresh_requested_at: null,
       fail_count: row.fail_count + 1, next_fetch_at: new Date(Date.now() + 30 * D).toISOString() });
   }
-  const patch: any = { status: "ok", source: "auto", last_error: null, fail_count: 0, last_fetched_at: now, refresh_requested_at: null };
-  for (const k of ["title", "posted_at", "views", "likes", "comments", "shares", "saves"]) if (r[k] !== null && r[k] !== undefined) patch[k] = r[k];
+  const patch: any = { status: "ok", source: row.source === "manual" ? "manual" : "auto", last_error: null, fail_count: 0, last_fetched_at: now, refresh_requested_at: null };
+  for (const k of ["title", "posted_at"]) if (r[k] !== null && r[k] !== undefined) patch[k] = r[k];
+  // Angka langsung dari platform disimpan di "live"; database menggabungkannya dengan angka Sheet
+  // (diambil yang tertinggi per metrik, lihat fungsi merge_metrics di schema.sql).
+  patch.live = Object.fromEntries(["views", "likes", "comments", "shares", "saves"].map((k) => [k, r[k] ?? null]));
   patch.next_fetch_at = nextFetch(patch.posted_at || row.posted_at);
   if (r.external_id && r.external_id !== row.external_id) {
     // Link pendek TikTok: gabungkan bila video yang sama sudah tercatat di brand ini.

@@ -136,7 +136,6 @@ const CFG = window.XANDER_CONFIG || {};
 const LIVE = !!(CFG.supabaseUrl && CFG.supabaseAnonKey);
 const PLAT = { tiktok: 'TikTok', instagram: 'Instagram', youtube: 'YouTube' };
 const METRICS = ['views', 'likes', 'comments', 'shares', 'saves'];
-const SHEET_GAP = { tiktok: [], youtube: ['shares', 'saves'], instagram: ['shares', 'saves'] };
 const nf = new Intl.NumberFormat('id-ID');
 const cf = new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 });
 const $ = (s, el = document) => el.querySelector(s);
@@ -329,7 +328,7 @@ function render() {
   const range = periodRange();
   const periodText = range ? `${dateLabel(range[0] === '0000-01-01' ? null : range[0])} – ${dateLabel(range[1] === '9999-12-31' ? null : range[1])}` : 'Semua waktu';
   const manualPl = ['instagram', 'youtube'].filter((p) => S.platforms.has(p)).map((p) => PLAT[p]);
-  const manualNote = !manualPl.length ? 'otomatis dari TikTok' : manualPl.length === 2 && S.platforms.has('tiktok') ? 'IG &amp; YouTube: input manual dari Sheet' : manualPl.join(' &amp; ') + ': input manual dari Sheet';
+  const manualNote = !manualPl.length ? 'TikTok + Sheet, angka tertinggi' : manualPl.length === 2 && S.platforms.has('tiktok') ? 'IG &amp; YouTube: input manual dari Sheet' : manualPl.join(' &amp; ') + ': input manual dari Sheet';
   const cs = [S.settings.collector_status, S.settings.collector_heartbeat].filter((x) => x?.at).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
 
   $('#root').innerHTML = `
@@ -618,18 +617,17 @@ async function syncSheet(silent = false) {
       const hasData = METRICS.some((k) => l.sheet[k] !== null);
       if (!cur) {
         const row = { brand_id: brand.id, platform: l.platform, external_id: l.key, url: l.url, posted_at: l.sheet.posted_at };
-        if (hasData) Object.assign(row, { views: l.sheet.views, likes: l.sheet.likes, comments: l.sheet.comments, shares: l.sheet.shares, saves: l.sheet.saves, source: 'sheet' });
-        else Object.assign(row, { views: null, likes: null, comments: null, shares: null, saves: null, source: 'none' });
+        if (hasData) Object.assign(row, { sheet: Object.fromEntries(METRICS.map((k) => [k, l.sheet[k]])), source: 'sheet' });
+        else row.source = 'none';
         fresh.push(row);
       } else if (hasData && cur.source !== 'manual') {
-        // Belum pernah terambil otomatis: ikuti semua angka di sheet.
-        // Sudah terambil otomatis: sheet hanya mengisi angka yang tidak tersedia publik.
-        const fromSheet = cur.source === 'sheet' || cur.source === 'none';
+        // Angka Sheet disimpan di kolom 'sheet'; database memilih angka tertinggi antara Sheet dan data langsung.
+        const snap = Object.fromEntries(METRICS.map((k) => [k, l.sheet[k]]));
         const patch = {};
-        for (const k of fromSheet ? METRICS : SHEET_GAP[l.platform] || []) if (l.sheet[k] !== null && l.sheet[k] !== cur[k]) patch[k] = l.sheet[k];
-        if (fromSheet && l.sheet.posted_at && (!cur.posted_at || Date.parse(cur.posted_at) !== Date.parse(l.sheet.posted_at))) patch.posted_at = l.sheet.posted_at;
-        if (fromSheet && (Object.keys(patch).length || cur.source === 'none')) patches.push([cur.id, { ...patch, source: 'sheet' }]);
-        else if (!fromSheet && Object.keys(patch).length) patches.push([cur.id, patch]);
+        if (JSON.stringify(snap) !== JSON.stringify(Object.fromEntries(METRICS.map((k) => [k, cur.sheet?.[k] ?? null])))) patch.sheet = snap;
+        if (cur.source === 'none') patch.source = 'sheet';
+        if ((cur.source === 'sheet' || cur.source === 'none') && l.sheet.posted_at && (!cur.posted_at || Date.parse(cur.posted_at) !== Date.parse(l.sheet.posted_at))) patch.posted_at = l.sheet.posted_at;
+        if (Object.keys(patch).length) patches.push([cur.id, patch]);
       }
     }
     for (let i = 0; i < fresh.length; i += 500) await DB.addContents(fresh.slice(i, i + 500));
@@ -769,6 +767,7 @@ async function settingsDialog() {
       if (!fd.get('url').trim()) { toast('Isi link Google Sheets terlebih dahulu.'); return false; }
       toast('Mengunduh dan membaca Sheet…');
       const st = await syncSheet();
+      Object.assign(S, await DB.load());
       toast(`Sinkron selesai: ${st.added} link baru, ${st.brands} brand baru, ${st.updated} diperbarui. Angka terbaru terisi bertahap.`);
     } else toast('Pengaturan tersimpan.');
   });
