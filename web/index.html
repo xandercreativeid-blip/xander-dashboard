@@ -143,8 +143,11 @@ textarea { min-height: 150px; resize: vertical; font-family: ui-monospace, Menlo
 .tv-list .v { text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; }
 .tv-list .v small { display: block; color: var(--text-2); font-weight: 400; font-size: 1.5vh; }
 .tv-foot { display: flex; justify-content: space-between; align-items: center; color: var(--text-3); font-size: 1.6vh; }
-.tv-progress { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; width: 22vw; }
-.tv-progress i { display: block; height: 100%; background: var(--accent); width: 0; }
+.tv-next { display: flex; align-items: center; gap: 1vw; }
+.tv-next .count { font-variant-numeric: tabular-nums; color: var(--text-2); }
+.tv-next .count b { color: var(--text); font-weight: 650; font-size: 2.2vh; }
+.tv-progress { height: .7vh; min-height: 4px; background: var(--line); border-radius: 99px; overflow: hidden; width: 22vw; }
+.tv-progress i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transform-origin: left center; transform: scaleX(0); will-change: transform; }
 .tv-exit { position: fixed; top: 1.2vh; right: 1vw; opacity: 0; transition: opacity .2s; }
 .tv.pointer .tv-exit { opacity: 1; }
 .tv svg text { font-size: 1.5vh; }
@@ -1015,8 +1018,11 @@ function tvTick() {
   const c = $('#tvClock'); if (!c) return;
   const now = new Date();
   c.innerHTML = `<b>${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</b><span>${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>`;
-  const bar = $('.tv-progress i');
-  if (bar && TV.rotate) bar.style.width = Math.min(100, ((Date.now() - TV.started) / (TV.rotate * 1000)) * 100) + '%';
+  const cnt = $('#tvCount');
+  if (cnt && TV.rotate) {
+    const left = Math.max(0, Math.ceil(TV.rotate - (Date.now() - TV.started) / 1000));
+    cnt.textContent = left >= 60 ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : `${left}s`;
+  }
 }
 function renderTv() {
   const brand = S.brandMap.get(S.brandId), list = filtered(), sum = summarize(list);
@@ -1025,6 +1031,8 @@ function renderTv() {
   const periodText = range ? `${dateLabel(range[0] === '0000-01-01' ? null : range[0])} – ${dateLabel(range[1] === '9999-12-31' ? null : range[1])}` : 'All time';
   const plats = Object.keys(PLAT).filter((p) => S.platforms.has(p));
   const cs = [S.settings.collector_status, S.settings.collector_heartbeat].filter((x) => x?.at).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
+  const nextId = TV.rotate ? TV.seq[(TV.idx + 1) % TV.seq.length] : null;
+  const nextName = nextId === 'all' ? 'All Brands' : S.brandMap.get(nextId)?.name || '';
   const big = (v) => (v >= 100000 ? cf.format(v) : nf.format(v));
   const k = (label, val, note = '') => `<div class="tile"><div class="lab">${label}</div><div class="val">${val}</div><div class="note">${note}</div></div>`;
   let side;
@@ -1049,13 +1057,22 @@ function renderTv() {
       <section class="card">${side}</section>
     </div>
     <div class="tv-foot"><span>XANDER CREATIVE · Content Performance</span>
-      <span>${TV.rotate ? `Screen ${TV.idx + 1} of ${TV.seq.length} · next in ${TV.rotate}s` : ''}</span>
-      ${TV.rotate ? '<div class="tv-progress"><i></i></div>' : '<span></span>'}</div>
+      <span>${TV.rotate ? `Screen ${TV.idx + 1} of ${TV.seq.length}` : ''}</span>
+      ${TV.rotate ? `<div class="tv-next"><span class="count">Next: ${esc(nextName)} in <b id="tvCount"></b></span><div class="tv-progress"><i id="tvBar"></i></div></div>` : '<span></span>'}</div>
     <button class="btn tv-exit" id="tvExit">✕ Exit TV Mode</button>
   </div>`;
   const months = byMonth(list);
   renderChart(months.length > 12 ? list.filter((c) => dayKey(c.posted_at) >= months[months.length - 12].ym) : list);
   $('#tvExit').onclick = stopTv;
+  // Garis progres bergerak mulus: satu animasi CSS linear dari posisi sekarang sampai penuh tepat saat layar berganti.
+  const bar = $('#tvBar');
+  if (bar) {
+    const elapsed = Math.min(1, (Date.now() - TV.started) / (TV.rotate * 1000));
+    bar.style.transform = `scaleX(${elapsed})`;
+    bar.getBoundingClientRect();
+    bar.style.transition = `transform ${Math.max(0, TV.rotate * (1 - elapsed))}s linear`;
+    bar.style.transform = 'scaleX(1)';
+  }
   const tv = $('#tv');
   tv.onmousemove = () => { tv.classList.add('pointer'); clearTimeout(TV.pointerTimer); TV.pointerTimer = setTimeout(() => tv.classList.remove('pointer'), 3000); };
   tvTick();
