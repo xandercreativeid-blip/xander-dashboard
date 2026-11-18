@@ -34,6 +34,15 @@ per brand, sepanjang waktu, per bulan posting, atau rentang tanggal bebas.
   Keduanya hanya bisa ditulis dari dashboard, tidak bisa dibaca kembali.
 - Bagian Instagram bersifat eksperimental dan belum teruji dengan akun sungguhan.
 
+## Brand diarsipkan
+
+- Tab brand yang disembunyikan (hide) di macrosheets otomatis menjadi **Archived** di dashboard; tampilkan lagi tab-nya
+  untuk mengaktifkan kembali.
+- Brand yang diarsipkan ada di bagian **Archived** di bawah daftar brand, dan tidak dihitung di All Brands kecuali
+  tombol **Include archived brands** dinyalakan.
+- Tombol **Archive / Unarchive** dan pilihan **Status** di Brand Settings mengatur arsip secara manual
+  (Follow Google Sheets / Always Active / Always Archived).
+
 ## Export dan TV Mode
 
 - **⤓ Export** (kanan atas dan di atas daftar konten): unduh tampilan yang sedang aktif (brand, periode, platform,

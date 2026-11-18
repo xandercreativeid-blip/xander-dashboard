@@ -11,7 +11,7 @@ export const utils = {
   decode_range: (ref) => { const [a, b] = ref.split(':'); return { s: utils.decode_cell(a), e: utils.decode_cell(b || a) }; },
 };
 
-// Daftar tab + teks bersama. Mengembalikan { tabs: [{ name, path }], strings: [...] }.
+// Daftar tab + teks bersama. Mengembalikan { tabs: [{ name, path, hidden }], strings: [...] }.
 export function openWorkbook(unzip, data) {
   const meta = unzip(data, { filter: (f) => f.name === 'xl/workbook.xml' || f.name === 'xl/_rels/workbook.xml.rels' || f.name === 'xl/sharedStrings.xml' });
   const rels = new Map();
@@ -20,7 +20,7 @@ export function openWorkbook(unzip, data) {
     rels.set(attr(m[0], 'Id'), target.startsWith('/') ? target.slice(1) : 'xl/' + target);
   }
   const tabs = [];
-  for (const m of dec.decode(meta['xl/workbook.xml']).matchAll(/<sheet\b[^>]*>/g)) tabs.push({ name: attr(m[0], 'name'), path: rels.get(attr(m[0], 'r:id')) });
+  for (const m of dec.decode(meta['xl/workbook.xml']).matchAll(/<sheet\b[^>]*>/g)) tabs.push({ name: attr(m[0], 'name'), path: rels.get(attr(m[0], 'r:id')), hidden: /hidden/i.test(attr(m[0], 'state') || '') });
   const strings = [];
   if (meta['xl/sharedStrings.xml']) {
     for (const m of dec.decode(meta['xl/sharedStrings.xml']).matchAll(/<si\b[^>]*?(?:\/>|>([\s\S]*?)<\/si>)/g)) {

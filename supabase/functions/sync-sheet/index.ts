@@ -41,6 +41,12 @@ async function sync() {
   await sb.from("settings").upsert({ key: "sheet_cursor", value: { next: (start + slice.length) % wanted.length } });
 
   const brands = await all(() => sb.from("brands").select("*").order("id"));
+  // Tab yang disembunyikan di macrosheets = brand diarsipkan (kecuali diatur manual di dashboard).
+  const hiddenByTab = new Map(wanted.map((t: any) => [norm(t.name), !!t.hidden]));
+  for (const b of brands) {
+    const h = hiddenByTab.get(norm(b.sheet_tab || b.name));
+    if (h !== undefined && h !== b.sheet_hidden) { await sb.from("brands").update({ sheet_hidden: h }).eq("id", b.id); b.sheet_hidden = h; }
+  }
   const prev = (await sb.from("settings").select("value").eq("key", "sheet_last_sync").maybeSingle()).data?.value;
   const stats: any = { at: new Date().toISOString(), brands: 0, added: 0, updated: 0, auto: true, last_added_at: prev?.last_added_at || null, tabs: slice.map((t: any) => t.name) };
   for (const t of slice) {
@@ -48,7 +54,7 @@ async function sync() {
     if (!tab.links.length) continue;
     let brand = brands.find((b) => norm(b.sheet_tab || b.name) === norm(tab.tab));
     if (!brand) {
-      const { data, error } = await sb.from("brands").insert({ name: tab.tab.trim(), sheet_tab: tab.tab }).select().single();
+      const { data, error } = await sb.from("brands").insert({ name: tab.tab.trim(), sheet_tab: tab.tab, sheet_hidden: !!t.hidden }).select().single();
       if (error) throw new Error(error.message);
       brand = data; brands.push(brand); stats.brands++;
     }

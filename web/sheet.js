@@ -79,11 +79,12 @@
     const wb = XLSX.read(data, { type: data instanceof ArrayBuffer ? 'array' : 'buffer' });
     const skip = new Set((excludeTabs || []).map((t) => t.trim().toLowerCase()));
     const brands = [];
-    for (const name of wb.SheetNames) {
-      if (skip.has(name.trim().toLowerCase())) continue;
+    const meta = (wb.Workbook && wb.Workbook.Sheets) || [];
+    wb.SheetNames.forEach((name, i) => {
+      if (skip.has(name.trim().toLowerCase())) return;
       const links = parseTab(wb.Sheets[name], XLSX.utils);
-      if (links.length) brands.push({ tab: name, links });
-    }
+      if (links.length) brands.push({ tab: name, links, hidden: !!(meta[i] && meta[i].Hidden) });
+    });
     return brands;
   }
   g.XSheet = { parseWorkbook, parseTab, parseSheetDate };

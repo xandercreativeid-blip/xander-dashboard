@@ -44,6 +44,9 @@ button { cursor: pointer; }
 .brandlist button small { color: var(--text-3); font-variant-numeric: tabular-nums; }
 .brandlist button[aria-current=true] small { color: inherit; opacity: .7; }
 .brandlist .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brandlist .archived-toggle { margin-top: 10px; border-top: 1px solid var(--line); border-radius: 0; padding-top: 10px; color: var(--text-2); font-weight: 600; }
+.brandlist .archived-list button:not([aria-current=true]) { color: var(--text-2); }
+.badge.arch { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--line); vertical-align: middle; margin-left: 8px; font-size: 12px; }
 .sidefoot { border-top: 1px solid var(--line); padding: 10px 12px; display: grid; gap: 6px; }
 .main { padding: 20px 24px 48px; min-width: 0; }
 .head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; justify-content: space-between; }
@@ -231,7 +234,9 @@ const DB = {
   },
   async updateBrand(id, patch) {
     if (LIVE) this.ok(await this.sb.from('brands').update(patch).eq('id', id));
-    Object.assign(S.brands.find((b) => b.id === id), patch);
+    const b = S.brands.find((x) => x.id === id);
+    Object.assign(b, patch);
+    b.archived = b.archived_override ?? !!b.sheet_hidden;
   },
   async deleteBrand(id) {
     if (LIVE) this.ok(await this.sb.from('brands').delete().eq('id', id));
@@ -310,7 +315,14 @@ const S = {
   period: 'all', month: todayKey().slice(0, 7), from: '', to: '',
   platforms: new Set(Object.keys(PLAT)),
   sort: { key: 'posted_at', dir: -1 }, page: 0, q: '',
+  showArchived: pref('showArchived', false), includeArchived: pref('includeArchived', false),
 };
+function pref(k, d) { try { const v = localStorage.getItem('xd.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } }
+function setPref(k, v) { S[k] = v; try { localStorage.setItem('xd.' + k, JSON.stringify(v)); } catch {} }
+// Brand diarsipkan bila tab-nya disembunyikan di macrosheets, kecuali diatur manual di Brand Settings.
+const isArchived = (b) => !!(b && (b.archived ?? b.archived_override ?? b.sheet_hidden));
+// Brand yang ikut dihitung di tampilan All Brands.
+const countedBrands = () => S.brands.filter((b) => S.includeArchived || !isArchived(b));
 const targetOf = (c) => S.brandMap.get(c.brand_id)?.views_target ?? 10000;
 
 function periodRange() {
@@ -332,6 +344,7 @@ function filtered() {
   const range = periodRange();
   return S.contents.filter((c) => {
     if (S.brandId !== 'all' && c.brand_id !== S.brandId) return false;
+    if (S.brandId === 'all' && !S.includeArchived && isArchived(S.brandMap.get(c.brand_id))) return false;
     if (!S.platforms.has(c.platform)) return false;
     if (range) { const k = dayKey(c.posted_at); if (!k || k < range[0] || k > range[1]) return false; }
     return true;
@@ -359,7 +372,12 @@ function render() {
   const counts = new Map();
   for (const c of S.contents) counts.set(c.brand_id, (counts.get(c.brand_id) || 0) + 1);
   const brandsSorted = [...S.brands].sort((a, b) => a.name.localeCompare(b.name, 'en'));
-  const shown = brandsSorted.filter((b) => b.name.toLowerCase().includes(S.brandSearch.toLowerCase()));
+  const match = (b) => b.name.toLowerCase().includes(S.brandSearch.toLowerCase());
+  const shown = brandsSorted.filter((b) => !isArchived(b) && match(b));
+  const archivedAll = brandsSorted.filter(isArchived), archivedShown = archivedAll.filter(match);
+  const openArchived = S.showArchived || (S.brandSearch && archivedShown.length) || isArchived(brand);
+  const allCount = S.contents.filter((c) => S.includeArchived || !isArchived(S.brandMap.get(c.brand_id))).length;
+  const brandBtn = (b) => `<button data-brand="${b.id}" aria-current="${S.brandId === b.id}"><span class="name">${esc(b.name)}</span><small>${nf.format(counts.get(b.id) || 0)}</small></button>`;
   const target = brand ? brand.views_target : null;
   const range = periodRange();
   const periodText = range ? `${dateLabel(range[0] === '0000-01-01' ? null : range[0])} – ${dateLabel(range[1] === '9999-12-31' ? null : range[1])}` : 'All time';
@@ -373,8 +391,10 @@ function render() {
       <div class="brandmark"><b>XANDER CREATIVE</b><span>Content Performance</span></div>
       <input type="search" id="brandSearch" placeholder="Search brands…" value="${esc(S.brandSearch)}" aria-label="Search brands">
       <nav class="brandlist" aria-label="Brand">
-        <button data-brand="all" aria-current="${S.brandId === 'all'}"><span class="name">All Brands</span><small>${nf.format(S.contents.length)}</small></button>
-        ${shown.map((b) => `<button data-brand="${b.id}" aria-current="${S.brandId === b.id}"><span class="name">${esc(b.name)}</span><small>${nf.format(counts.get(b.id) || 0)}</small></button>`).join('')}
+        <button data-brand="all" aria-current="${S.brandId === 'all'}"><span class="name">All Brands</span><small>${nf.format(allCount)}</small></button>
+        ${shown.map(brandBtn).join('')}
+        ${archivedAll.length ? `<button class="archived-toggle" id="archivedToggle" aria-expanded="${!!openArchived}"><span class="name">${openArchived ? '▾' : '▸'} Archived</span><small>${archivedAll.length}</small></button>
+        ${openArchived ? `<div class="archived-list">${archivedShown.map(brandBtn).join('') || '<span class="sub" style="padding:4px 8px">No match</span>'}</div>` : ''}` : ''}
       </nav>
       <div class="sidefoot">
         <button class="btn" id="addBrand">+ New Brand</button>
@@ -386,15 +406,16 @@ function render() {
       ${LIVE ? '' : '<div class="banner">Preview mode: sample data from your Google Sheet. Changes here are not saved.</div>'}
       <select class="mobilebrand" id="mobileBrand" aria-label="Select brand">
         <option value="all">All Brands</option>
-        ${brandsSorted.map((b) => `<option value="${b.id}" ${S.brandId === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}
+        ${brandsSorted.filter((b) => !isArchived(b)).map((b) => `<option value="${b.id}" ${S.brandId === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}
+        ${archivedAll.length ? `<optgroup label="Archived">${archivedAll.map((b) => `<option value="${b.id}" ${S.brandId === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</optgroup>` : ''}
       </select>
       <div class="head">
         <div>
-          <h1>${esc(brand ? brand.name : 'All Brands')}</h1>
-          <div class="sub">${brand ? `Views target per content: <b class="num">${nf.format(target)}</b>` : `${S.brands.length} brands · views target set per brand`}${cs?.at ? ` · Data updated ${ago(cs.at)}` : ''}</div>
+          <h1>${esc(brand ? brand.name : 'All Brands')}${isArchived(brand) ? '<span class="badge arch">Archived</span>' : ''}</h1>
+          <div class="sub">${brand ? `Views target per content: <b class="num">${nf.format(target)}</b>` : `${countedBrands().length} brands${archivedAll.length ? (S.includeArchived ? ` (incl. ${archivedAll.length} archived)` : ` · ${archivedAll.length} archived not counted`) : ''} · views target set per brand`}${cs?.at ? ` · Data updated ${ago(cs.at)}` : ''}</div>
         </div>
         <div class="actions">
-          ${brand ? '<button class="btn" id="editBrand">Brand Settings</button>' : ''}
+          ${brand ? `<button class="btn" id="archiveBrand" title="${isArchived(brand) ? 'Move back to active brands' : 'Hide from All Brands totals and the main list'}">${isArchived(brand) ? '↺ Unarchive' : '🗄 Archive'}</button><button class="btn" id="editBrand">Brand Settings</button>` : ''}
           <button class="btn" id="refreshAll" ${list.length ? '' : 'disabled'}>↻ Refresh Data</button>
           <button class="btn" id="exportBtn" ${list.length ? '' : 'disabled'}>⤓ Export</button>
           <button class="btn" id="tvBtn">▣ TV Mode</button>
@@ -412,6 +433,7 @@ function render() {
           <button class="chip" data-plat="all" aria-pressed="${S.platforms.size === Object.keys(PLAT).length}">All Platforms</button>
           ${Object.entries(PLAT).map(([k, l]) => `<button class="chip" data-plat="${k}" aria-pressed="${S.platforms.size === 1 && S.platforms.has(k)}"><i class="dot" style="background:var(--${k})"></i>${l}</button>`).join('')}
         </div>
+        ${!brand && archivedAll.length ? `<button class="chip" id="inclArchived" aria-pressed="${S.includeArchived}" title="Count archived brands in All Brands totals">${S.includeArchived ? '✓ ' : ''}Include archived brands</button>` : ''}
         <span class="sub">Posting date: ${periodText}</span>
       </div>
       <div class="tiles">
@@ -523,9 +545,9 @@ function renderMonthly(list) {
   </tbody></table>`;
 }
 function renderBrandTable(list) {
-  const rows = S.brands.map((b) => ({ b, s: summarize(list.filter((c) => c.brand_id === b.id)) })).sort((a, z) => z.s.views - a.s.views);
+  const rows = countedBrands().map((b) => ({ b, s: summarize(list.filter((c) => c.brand_id === b.id)) })).sort((a, z) => z.s.views - a.s.views);
   $('#brandTable').innerHTML = `<table><thead><tr><th>Brand</th>${SUM_HEAD}</tr></thead><tbody>
-    ${rows.map(({ b, s }) => `<tr class="clickable" data-brand="${b.id}"><td>${esc(b.name)}</td>${sumCells(s)}</tr>`).join('')}</tbody></table>`;
+    ${rows.map(({ b, s }) => `<tr class="clickable" data-brand="${b.id}"><td>${esc(b.name)}${isArchived(b) ? ' <span class="badge mute">Archived</span>' : ''}</td>${sumCells(s)}</tr>`).join('')}</tbody></table>`;
 }
 
 function statusBadge(c) {
@@ -579,6 +601,8 @@ function renderContents(list) {
 function bind(list) {
   const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
   document.querySelectorAll('[data-brand]').forEach((b) => b.addEventListener('click', () => { S.brandId = b.dataset.brand; S.page = 0; render(); window.scrollTo(0, 0); }));
+  on('#archivedToggle', 'click', () => { setPref('showArchived', !S.showArchived); render(); });
+  on('#inclArchived', 'click', () => { setPref('includeArchived', !S.includeArchived); S.page = 0; render(); });
   on('#mobileBrand', 'change', (e) => { S.brandId = e.target.value; S.page = 0; render(); });
   on('#brandSearch', 'input', (e) => { S.brandSearch = e.target.value; render(); const i = $('#brandSearch'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); });
   on('#period', 'change', (e) => { S.period = e.target.value; S.page = 0; render(); });
@@ -597,6 +621,14 @@ function bind(list) {
   on('#tvBtn', 'click', tvDialog);
   on('#addBrand', 'click', () => brandDialog(null));
   on('#editBrand', 'click', () => brandDialog(S.brandMap.get(S.brandId)));
+  on('#archiveBrand', 'click', async () => {
+    const b = S.brandMap.get(S.brandId), to = !isArchived(b);
+    try {
+      // Kembali mengikuti Sheet bila itu sudah memberi status yang diminta; selain itu simpan sebagai pilihan manual.
+      await DB.updateBrand(b.id, { archived_override: !!b.sheet_hidden === to ? null : to });
+      toast(to ? `${b.name} archived.` : `${b.name} is active again.`); render();
+    } catch (e) { toast('Failed: ' + e.message); }
+  });
   on('#addLinks', 'click', linksDialog);
   on('#openSettings', 'click', settingsDialog);
   on('#logout', 'click', async () => { await DB.sb.auth.signOut(); location.reload(); });
@@ -648,7 +680,8 @@ async function syncSheet(silent = false) {
   for (const tab of tabs) {
     const norm = (t) => String(t || '').trim().toLowerCase();
     let brand = S.brands.find((b) => norm(b.sheet_tab || b.name) === norm(tab.tab));
-    if (!brand) { brand = await DB.addBrand({ name: tab.tab.trim(), sheet_tab: tab.tab }); stats.brands++; }
+    if (!brand) { brand = await DB.addBrand({ name: tab.tab.trim(), sheet_tab: tab.tab, sheet_hidden: !!tab.hidden }); stats.brands++; }
+    else if (!!brand.sheet_hidden !== !!tab.hidden) await DB.updateBrand(brand.id, { sheet_hidden: !!tab.hidden });
     const byKey = new Map();
     for (const c of S.contents) if (c.brand_id === brand.id) { byKey.set(c.platform + ':' + c.external_id, c); for (const a of c.aliases || []) byKey.set(c.platform + ':' + a, c); }
     const fresh = [], patches = [];
@@ -719,6 +752,7 @@ function reportData(list) {
     platforms: plats.length === Object.keys(PLAT).length ? 'All platforms' : plats.map((p) => PLAT[p]).join(', '),
     generated: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
     target: brand ? `${nf.format(target)} views per content` : 'Set per brand',
+    scope: brand ? (isArchived(brand) ? 'Archived brand' : 'Active brand') : S.includeArchived ? 'All brands, including archived' : 'Active brands only (archived excluded)',
     search: S.q.trim(),
   };
   const hitLabel = brand ? `Contents with ${cf.format(target)}+ views` : 'Contents hitting views target';
@@ -734,7 +768,7 @@ function reportData(list) {
     monthly: byMonth(list).filter((m) => m.items.length).reverse().map((m) => [monthLabel(m.ym), ...statRow(summarize(m.items))]),
     monthlyByPlatform: byMonth(list).slice(-12).map((m) => ({ label: monthLabel(m.ym), ...Object.fromEntries(plats.map((p) => [p, m[p]])) })),
     plats,
-    brands: S.brandId === 'all' ? S.brands.map((b) => [b.name, ...statRow(summarize(list.filter((c) => c.brand_id === b.id)))]).filter((r) => r[1]).sort((a, z) => z[2] - a[2]) : null,
+    brands: S.brandId === 'all' ? countedBrands().map((b) => [b.name + (isArchived(b) ? ' (archived)' : ''), ...statRow(summarize(list.filter((c) => c.brand_id === b.id)))]).filter((r) => r[1]).sort((a, z) => z[2] - a[2]) : null,
     contentHead: ['Brand', 'Platform', 'Title', 'Link', 'Posted', 'Views', 'Likes', 'Comments', 'Shares', 'Saves', 'ER', 'Source'],
     contents: contents.map((c) => [S.brandMap.get(c.brand_id)?.name || '', PLAT[c.platform], c.title || '', c.url, dayKey(c.posted_at) || '', c.views, c.likes, c.comments, c.shares, c.saves, erOf(c),
       { auto: 'Live', sheet: 'Sheet', manual: 'Manual', none: '' }[c.source] || '']),
@@ -745,7 +779,7 @@ const fmtCell = (v, kind) => (v === null || v === undefined || v === '' ? '–' 
 const statText = (r) => r.map((v, i) => fmtCell(v, i === 7 ? 'int' : i === 6 ? 'pct' : 'int'));
 const contentText = (r) => r.map((v, i) => (i === 10 ? fmtCell(v, 'pct') : i >= 5 && i <= 9 ? fmtCell(v) : v || '–'));
 const kpiText = (k) => (k[3] !== undefined ? k[3] : fmtCell(k[1], k[2]));
-const metaLines = (d) => [['Period (posting date)', d.meta.period], ['Platforms', d.meta.platforms], ['Views target', d.meta.target], ...(d.meta.search ? [['Search filter', d.meta.search]] : []), ['Generated', d.meta.generated]];
+const metaLines = (d) => [['Brands', d.meta.scope], ['Period (posting date)', d.meta.period], ['Platforms', d.meta.platforms], ['Views target', d.meta.target], ...(d.meta.search ? [['Search filter', d.meta.search]] : []), ['Generated', d.meta.generated]];
 
 // ---- Excel
 async function exportXlsx(d) {
@@ -933,11 +967,11 @@ function tvLink(brand, rotate) {
   return u.toString();
 }
 function tvDialog() {
-  const brands = [...S.brands].sort((a, b) => a.name.localeCompare(b.name, 'en'));
+  const brands = [...S.brands].filter((b) => !isArchived(b)).sort((a, b) => a.name.localeCompare(b.name, 'en'));
   const d = dialog(`<h3>TV Mode</h3>
     <div class="hint">A full-screen view for an office TV or monitor. Numbers refresh automatically every 3 minutes. Uses the current period and platform filter.</div>
     <label>Show<select name="what">
-      <option value="rotate">Rotate: All Brands, then each brand</option>
+      <option value="rotate">Rotate: All Brands, then each ${S.includeArchived ? '' : 'active '}brand</option>
       <option value="all" ${S.brandId === 'all' ? 'selected' : ''}>All Brands only</option>
       ${brands.map((b) => `<option value="${b.id}" ${S.brandId === b.id ? 'selected' : ''}>${esc(b.name)} only</option>`).join('')}
     </select></label>
@@ -968,7 +1002,7 @@ function startTv(brandId, rotate, fullscreen) {
 function tvSequence() {
   const views = new Map();
   for (const c of S.contents) views.set(c.brand_id, (views.get(c.brand_id) || 0) + (c.views || 0));
-  TV.seq = ['all', ...S.brands.filter((b) => views.get(b.id)).sort((a, z) => views.get(z.id) - views.get(a.id)).map((b) => b.id)];
+  TV.seq = ['all', ...countedBrands().filter((b) => views.get(b.id)).sort((a, z) => views.get(z.id) - views.get(a.id)).map((b) => b.id)];
 }
 function stopTv() {
   if (!TV.on) return;
@@ -995,7 +1029,7 @@ function renderTv() {
   const k = (label, val, note = '') => `<div class="tile"><div class="lab">${label}</div><div class="val">${val}</div><div class="note">${note}</div></div>`;
   let side;
   if (!brand) {
-    const rows = S.brands.map((b) => ({ b, s: summarize(list.filter((c) => c.brand_id === b.id)) })).filter((r) => r.s.n).sort((a, z) => z.s.views - a.s.views).slice(0, 8);
+    const rows = countedBrands().map((b) => ({ b, s: summarize(list.filter((c) => c.brand_id === b.id)) })).filter((r) => r.s.n).sort((a, z) => z.s.views - a.s.views).slice(0, 8);
     side = `<header><h2>Top Brands by Views</h2></header><ol class="tv-list">${rows.map((r, i) => `<li><span class="rank">${i + 1}</span><span class="name">${esc(r.b.name)}<small>${nf.format(r.s.n)} contents · ER ${pct(r.s.er)}</small></span><span class="v">${big(r.s.views)}<small>${r.s.hit} hit target</small></span></li>`).join('')}</ol>`;
   } else {
     const top = list.filter((c) => c.views !== null && c.views !== undefined).sort((a, z) => z.views - a.views).slice(0, 6);
@@ -1003,7 +1037,7 @@ function renderTv() {
   }
   $('#root').innerHTML = `<div class="tv" id="tv">
     <div class="tv-head"><div><h1>${esc(brand ? brand.name : 'All Brands')}</h1>
-      <div class="sub">${periodText} · ${plats.length === 3 ? 'All Platforms' : plats.map((p) => PLAT[p]).join(', ')}${brand ? ` · Views target ${nf.format(target)}` : ` · ${S.brands.length} brands`}${cs?.at ? ` · Data updated ${ago(cs.at)}` : ''}</div></div>
+      <div class="sub">${periodText} · ${plats.length === 3 ? 'All Platforms' : plats.map((p) => PLAT[p]).join(', ')}${brand ? ` · Views target ${nf.format(target)}` : ` · ${countedBrands().length} brands${S.includeArchived ? ' incl. archived' : ''}`}${cs?.at ? ` · Data updated ${ago(cs.at)}` : ''}</div></div>
       <div class="tv-clock" id="tvClock"></div></div>
     <div class="tv-kpis">
       ${k('Total Views', big(sum.views))}${k('Contents', nf.format(sum.n))}${k('Likes', big(sum.likes))}${k('Comments', big(sum.comments))}
@@ -1060,6 +1094,11 @@ function brandDialog(b) {
     <label>Brand name<input name="name" required value="${esc(b?.name)}"></label>
     <label>Views target per content<input name="target" type="number" min="1" step="1" required value="${b?.views_target ?? 10000}"></label>
     <label>Google Sheets tab name (optional, if different from the brand name)<input name="tab" value="${esc(b?.sheet_tab)}"></label>
+    ${b ? `<label>Status<select name="arch">
+      <option value="sheet" ${b.archived_override == null ? 'selected' : ''}>Follow Google Sheets (tab is ${b.sheet_hidden ? 'hidden → Archived' : 'visible → Active'})</option>
+      <option value="active" ${b.archived_override === false ? 'selected' : ''}>Always Active</option>
+      <option value="archived" ${b.archived_override === true ? 'selected' : ''}>Always Archived</option>
+    </select></label>` : ''}
     ${FOOT(b ? '<button class="btn danger" value="delete" formnovalidate>Delete Brand</button>' : '')}`,
   async (fd, action) => {
     if (action === 'delete') {
@@ -1067,13 +1106,14 @@ function brandDialog(b) {
       await DB.deleteBrand(b.id); S.brandId = 'all'; return;
     }
     const row = { name: fd.get('name').trim(), views_target: Math.max(1, Math.round(+fd.get('target'))), sheet_tab: fd.get('tab').trim() || null };
+    if (b) row.archived_override = { sheet: null, active: false, archived: true }[fd.get('arch')];
     if (b) await DB.updateBrand(b.id, row); else S.brandId = (await DB.addBrand(row)).id;
   });
 }
 
 function linksDialog() {
   const d = dialog(`<h3>Add Content Links</h3>
-    <label>Brand<select name="brand">${[...S.brands].sort((a, b) => a.name.localeCompare(b.name)).map((b) => `<option value="${b.id}" ${b.id === S.brandId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
+    <label>Brand<select name="brand">${[...S.brands].sort((a, b) => isArchived(a) - isArchived(b) || a.name.localeCompare(b.name)).map((b) => `<option value="${b.id}" ${b.id === S.brandId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
     <label>TikTok, Instagram Reels or YouTube Shorts links — one or many at once (one per line)<textarea name="links" placeholder="https://www.tiktok.com/@account/video/…&#10;https://www.instagram.com/reel/…&#10;https://www.youtube.com/shorts/…" required></textarea></label>
     <div class="hint" id="linkInfo">Platform and posting date are detected automatically.</div>
     ${FOOT()}`,

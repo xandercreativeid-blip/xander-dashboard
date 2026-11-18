@@ -130,3 +130,9 @@ end $$;
 drop trigger if exists contents_merge_metrics on contents;
 create trigger contents_merge_metrics before insert or update on contents
   for each row execute function merge_metrics();
+
+-- Arsip brand: tab yang disembunyikan di macrosheets (sheet_hidden, diisi sinkron Sheet) atau pilihan manual
+-- di dashboard (archived_override; null = ikuti Sheet).
+alter table brands add column if not exists sheet_hidden boolean not null default false;
+alter table brands add column if not exists archived_override boolean;
+alter table brands add column if not exists archived boolean generated always as (coalesce(archived_override, sheet_hidden)) stored;
