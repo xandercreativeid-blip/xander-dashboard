@@ -153,6 +153,17 @@ textarea { min-height: 150px; resize: vertical; font-family: ui-monospace, Menlo
 .tv-body .card > header h2 { font-size: 2.2vh; }
 .tv-body .legend { font-size: 1.6vh; }
 .tv-body #chart { flex: 1; min-height: 0; margin: 1vh 1vw 1.4vh; }
+.tv-side { display: flex; flex-direction: column; gap: 1.2vw; min-height: 0; }
+.tv-side > .card:last-child { flex: 1; }
+.tv-kpi { padding-bottom: 1.2vh; }
+.tv-kpi > header .sub { font-size: 1.6vh; }
+.tv-kpi-when { padding: .4vh 1vw 0; color: var(--text-2); font-size: 1.7vh; }
+.tv-krow { padding: 1vh 1vw 0; }
+.tv-krow .kl { display: flex; justify-content: space-between; gap: 1vw; font-size: 1.8vh; }
+.tv-krow .kl span { color: var(--text-2); }
+.tv-krow .kl b { font-variant-numeric: tabular-nums; }
+.tv-krow .kbar { height: 1vh; min-height: 6px; margin: .6vh 0 0; }
+.tv-list .kok { color: var(--good); }
 .tv-list { list-style: none; margin: 0; padding: .6vh 1vw 1vh; display: grid; gap: .2vh; overflow: hidden; }
 .tv-list li { display: grid; grid-template-columns: 3.4vh minmax(0, 1fr) auto; align-items: center; gap: .8vw; padding: .75vh 0; border-top: 1px solid var(--line); font-size: 2vh; }
 .tv-list li:first-child { border-top: 0; }
@@ -1209,6 +1220,22 @@ function tvTick() {
     cnt.textContent = left >= 60 ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : `${left}s`;
   }
 }
+// Kartu Contract & KPI ringkas untuk TV Mode (kosong bila brand belum punya blok KPI di macrosheets).
+function tvKpiCard(b) {
+  const st = kpiStats(b);
+  if (!st) return '';
+  const { k } = st, f = k.fields || {}, cr = contractRange(k), today = todayKey();
+  const left = cr ? Math.ceil((Date.parse(cr[1]) - Date.parse(today)) / 86400000) : null;
+  const rows = [];
+  if (k.total_videos) rows.push(['Videos posted in contract', st.postedMax, k.total_videos]);
+  if (k.quantity_per_month) rows.push([`Posted in ${MONTH_NAMES[+today.slice(5, 7) - 1]}`, st.monthMax, k.quantity_per_month]);
+  for (const x of st.fyp) rows.push([`KPI FYP · ${PLAT[x.p]} ≥ ${cf.format(x.fyp)}`, x.hits, x.target]);
+  const when = cr ? `${dateLabel(cr[0])} – ${dateLabel(cr[1])} · ${left > 0 ? `${left} days left` : left === 0 ? 'ends today' : 'ended'}` : esc(f.period || '');
+  return `<section class="card tv-kpi"><header><h2>Contract &amp; KPI</h2><span class="sub">${esc(f.contract || '')}</span></header>
+    <div class="tv-kpi-when">${when}</div>
+    ${rows.map(([l, v, t]) => `<div class="tv-krow"><div class="kl"><span>${l}</span><b>${nf.format(v)} / ${nf.format(t)}${v >= t ? ' ✓' : ''}</b></div>${progress(v, t)}</div>`).join('') || '<div class="tv-kpi-when">No numeric KPI in the macrosheets yet.</div>'}
+  </section>`;
+}
 function renderTv() {
   const brand = S.brandMap.get(S.brandId);
   CMP = comparison();
@@ -1225,10 +1252,14 @@ function renderTv() {
   let side;
   if (!brand) {
     const rows = countedBrands().map((b) => ({ b, s: summarize(list.filter((c) => c.brand_id === b.id)) })).filter((r) => r.s.n).sort((a, z) => z.s.views - a.s.views).slice(0, 8);
-    side = `<header><h2>Top Brands by Views</h2></header><ol class="tv-list">${rows.map((r, i) => `<li><span class="rank">${i + 1}</span><span class="name">${esc(r.b.name)}<small>${nf.format(r.s.n)} contents · ER ${pct(r.s.er)}</small></span><span class="v">${big(r.s.views)}<small>${r.s.hit} hit target</small></span></li>`).join('')}</ol>`;
+    const kpiTag = (b) => { const st = kpiStats(b); if (!st || !st.fyp.length) return '';
+      const h = st.fyp.reduce((a, x) => a + x.hits, 0), t = st.fyp.reduce((a, x) => a + x.target, 0);
+      return ` · <span class="${h >= t ? 'kok' : ''}">KPI FYP ${h}/${t}${h >= t ? ' ✓' : ''}</span>`; };
+    side = `<section class="card"><header><h2>Top Brands by Views</h2></header><ol class="tv-list">${rows.map((r, i) => `<li><span class="rank">${i + 1}</span><span class="name">${esc(r.b.name)}<small>${nf.format(r.s.n)} contents · ER ${pct(r.s.er)}${kpiTag(r.b)}</small></span><span class="v">${big(r.s.views)}<small>${r.s.hit} hit target</small></span></li>`).join('')}</ol></section>`;
   } else {
-    const top = list.filter((c) => c.views !== null && c.views !== undefined).sort((a, z) => z.views - a.views).slice(0, 6);
-    side = `<header><h2>Top Contents by Views</h2></header><ol class="tv-list">${top.map((c, i) => `<li><span class="rank">${i + 1}</span><span class="name">${esc(c.title || c.url.replace(/^https:\/\/(www\.)?/, ''))}<small><i class="dot" style="background:var(--${c.platform})"></i> ${PLAT[c.platform]} · ${dateLabel(dayKey(c.posted_at))}</small></span><span class="v">${big(c.views)}<small>ER ${pct(erOf(c))}</small></span></li>`).join('') || '<li><span></span><span class="name">No contents yet</span><span></span></li>'}</ol>`;
+    const kc = tvKpiCard(brand);
+    const top = list.filter((c) => c.views !== null && c.views !== undefined).sort((a, z) => z.views - a.views).slice(0, kc ? 3 : 6);
+    side = `${kc}<section class="card"><header><h2>Top Contents by Views</h2></header><ol class="tv-list">${top.map((c, i) => `<li><span class="rank">${i + 1}</span><span class="name">${esc(c.title || c.url.replace(/^https:\/\/(www\.)?/, ''))}<small><i class="dot" style="background:var(--${c.platform})"></i> ${PLAT[c.platform]} · ${dateLabel(dayKey(c.posted_at))}</small></span><span class="v">${big(c.views)}<small>ER ${pct(erOf(c))}</small></span></li>`).join('') || '<li><span></span><span class="name">No contents yet</span><span></span></li>'}</ol></section>`;
   }
   $('#root').innerHTML = `<div class="tv" id="tv">
     <div class="tv-head"><div><h1>${esc(brand ? brand.name : 'All Brands')}</h1>
@@ -1241,7 +1272,7 @@ function renderTv() {
     </div>
     <div class="tv-body">
       <section class="card"><header><h2>Views by Posting Month</h2><div class="legend">${plats.map((p) => `<span><i class="dot" style="background:var(--${p})"></i>${PLAT[p]}</span>`).join('')}</div></header><div class="chartwrap" id="chart"></div></section>
-      <section class="card">${side}</section>
+      <div class="tv-side">${side}</div>
     </div>
     <div class="tv-foot"><span>XANDER CREATIVE · Content Performance</span>
       <span>${TV.rotate ? `Screen ${TV.idx + 1} of ${TV.seq.length}` : ''}</span>
