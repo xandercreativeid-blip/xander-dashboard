@@ -23,3 +23,14 @@ test('tanggal di sheet', () => {
   assert.equal(parseSheetDate({ v: 46000 }), '2025-12-09T05:00:00.000Z');
   assert.equal(parseSheetDate({ v: 'Organic' }), null);
 });
+
+test('periode kontrak dari teks macrosheets', () => {
+  const P = (t) => [...globalThis.XSheet.parsePeriods(t, '2026-11-19')];
+  assert.deepEqual(P('08 Des 2025 - 10 Jul 2026, 10 Juni 2026 - 22 Jan 2027'), [['2025-12-08', '2026-07-10'], ['2026-06-10', '2027-01-22']]);
+  assert.deepEqual(P('14 September - 30 April 2027'), [['2026-09-14', '2027-04-30']]);
+  assert.deepEqual(P("31 AGS'26 - 15 JAN'27"), [['2026-08-31', '2027-01-15']]);
+  assert.deepEqual(P('OCT-MAR'), [['2026-10-01', '2027-03-31']]);
+  assert.deepEqual(P('4th Contract (15 Sep - 31 Jan)'), [['2026-09-15', '2027-01-31']]);
+  assert.deepEqual(P('Unlimited'), []);
+  assert.deepEqual(P('TBC FROM BD'), []);
+});

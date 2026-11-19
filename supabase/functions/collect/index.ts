@@ -48,7 +48,7 @@ async function fetchTikTok(url: string) {
     status: "ok", external_id: String(item.id),
     url: `https://www.tiktok.com/@${item.author?.uniqueId || ""}/video/${item.id}`,
     title: (item.desc || "").slice(0, 300) || null,
-    posted_at: item.createTime ? new Date(Number(item.createTime) * 1000).toISOString() : null,
+    posted_at: Number(item.createTime) > 0 ? new Date(Number(item.createTime) * 1000).toISOString() : null,  // TikTok kadang mengirim 0
     views: num(s.playCount), likes: num(s.diggCount), comments: num(s.commentCount),
     shares: num(s.shareCount), saves: num(s.collectCount),
   };

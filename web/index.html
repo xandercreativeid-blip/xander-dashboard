@@ -73,6 +73,19 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .tile .val { font-size: 24px; font-weight: 650; letter-spacing: -.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .tile .note { color: var(--text-3); font-size: 12px; min-height: 17px; }
 .tile.hero { border-color: var(--text); }
+.kpi .body { padding-top: 10px; }
+.kpi-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 18px 28px; }
+.kpi-grid dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; }
+.kpi-grid dt { color: var(--text-2); font-size: 12px; }
+.kpi-grid dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.kpi-grid dd a { color: var(--accent); }
+.kpi-progress { display: grid; gap: 14px; align-content: start; }
+.krow .kl { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+.krow .kl span { color: var(--text-2); }
+.kbar { height: 8px; background: var(--surface-2); border-radius: 99px; overflow: hidden; margin: 6px 0 4px; }
+.kbar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.kbar i.done { background: var(--good); }
+@media (max-width: 860px) { .kpi-grid { grid-template-columns: minmax(0, 1fr); } .kpi-grid dl { grid-template-columns: minmax(0, 1fr); } }
 .delta { font-size: 12px; font-weight: 600; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .delta.up { color: var(--good); }
 .delta.down { color: var(--bad); }
@@ -332,7 +345,27 @@ function setPref(k, v) { S[k] = v; try { localStorage.setItem('xd.' + k, JSON.st
 const isArchived = (b) => !!(b && (b.archived ?? b.archived_override ?? b.sheet_hidden));
 // Brand yang ikut dihitung di tampilan All Brands.
 const countedBrands = () => S.brands.filter((b) => S.includeArchived || !isArchived(b));
-const targetOf = (c) => S.brandMap.get(c.brand_id)?.views_target ?? 10000;
+// Blok KPI macrosheets untuk brand ini (bila brand ada di beberapa macrosheets, pilih yang punya tabel FYP
+// dan tab-nya tidak disembunyikan).
+function brandKpi(b) {
+  const all = Object.values((b && b.kpi) || {});
+  if (!all.length) return null;
+  const score = (k) => (Object.keys(k.platforms || {}).length ? 2 : 0) + (k.hidden ? 0 : 1) + (k.periods?.length ? 0.5 : 0);
+  return all.sort((a, z) => score(z) - score(a))[0];
+}
+// Target views per konten: FYP Quantity platformnya di macrosheets, atau target default brand.
+const targetFor = (b, platform) => brandKpi(b)?.platforms?.[platform]?.fyp ?? b?.views_target ?? 10000;
+const targetOf = (c) => targetFor(S.brandMap.get(c.brand_id), c.platform);
+// Teks target untuk judul, mis. "10K" atau "TikTok 10K · Instagram 100K".
+function targetText(b) {
+  const pl = brandKpi(b)?.platforms || {};
+  const set = Object.entries(pl).filter(([p, v]) => v.fyp && S.platforms.has(p));
+  if (!set.length) return cf.format(b.views_target ?? 10000);
+  const uniq = new Set(set.map(([, v]) => v.fyp));
+  return uniq.size === 1 ? cf.format(set[0][1].fyp) : set.map(([p, v]) => `${PLAT[p]} ${cf.format(v.fyp)}`).join(' · ');
+}
+const contractRange = (k) => (k?.periods?.length ? [k.periods.map((x) => x[0]).sort()[0], k.periods.map((x) => x[1]).sort().slice(-1)[0]] : null);
+const inPeriods = (k, day) => !k?.periods?.length || k.periods.some(([a, z]) => day >= a && day <= z);
 
 function periodRange() {
   const t = todayKey(), y = +t.slice(0, 4), m = +t.slice(5, 7);
@@ -348,6 +381,7 @@ function periodRange() {
     case 'year': return [`${y}-01-01`, `${y}-12-31`];
     case 'month': return S.month ? [S.month + '-01', monthEnd(S.month)] : null;
     case 'range': return S.from || S.to ? [S.from || '0000-01-01', S.to || '9999-12-31'] : null;
+    case 'contract': return contractRange(brandKpi(S.brandMap?.get(S.brandId)));
     default: return null;
   }
 }
@@ -360,7 +394,7 @@ function comparison() {
   const prevMonth = (ym) => { const [yy, mm] = ym.split('-').map(Number); return new Date(Date.UTC(yy, mm - 2, 1)).toISOString().slice(0, 7); };
   const sameDayIn = (ym, day) => `${ym}-${String(Math.min(day, +monthEnd(ym).slice(8))).padStart(2, '0')}`;
   const r = periodRange();
-  if (!r) return null;
+  if (!r || S.period === 'contract') return null;
   let cur = [...r], prev, label;
   const monthMode = S.period === 'this' || S.period === 'last' || (S.period === 'month' && S.month);
   if (monthMode) {
@@ -405,6 +439,7 @@ const erOf = (c) => (c.views ? ((c.likes || 0) + (c.comments || 0) + (c.shares |
 function render() {
   S.brandMap = new Map(S.brands.map((b) => [b.id, b]));
   if (S.brandId !== 'all' && !S.brandMap.has(S.brandId)) S.brandId = 'all';
+  if (S.period === 'contract' && !contractRange(brandKpi(S.brandMap.get(S.brandId)))) S.period = 'all';
   if (TV.on) return renderTv();
   const brand = S.brandMap.get(S.brandId);
   CMP = comparison();
@@ -454,7 +489,7 @@ function render() {
       <div class="head">
         <div>
           <h1>${esc(brand ? brand.name : 'All Brands')}${isArchived(brand) ? '<span class="badge arch">Archived</span>' : ''}</h1>
-          <div class="sub">${brand ? `Views target per content: <b class="num">${nf.format(target)}</b>` : `${countedBrands().length} brands${archivedAll.length ? (S.includeArchived ? ` (incl. ${archivedAll.length} archived)` : ` · ${archivedAll.length} archived not counted`) : ''} · views target set per brand`}${cs?.at ? ` · Data updated ${ago(cs.at)}` : ''}</div>
+          <div class="sub">${brand ? `Views target per content: <b class="num">${targetText(brand)}</b>${brandKpi(brand) && Object.keys(brandKpi(brand).platforms || {}).length ? ' (FYP Quantity)' : ''}` : `${countedBrands().length} brands${archivedAll.length ? (S.includeArchived ? ` (incl. ${archivedAll.length} archived)` : ` · ${archivedAll.length} archived not counted`) : ''} · views target set per brand`}${cs?.at ? ` · Data updated ${ago(cs.at)}` : ''}</div>
         </div>
         <div class="actions">
           ${brand ? `<button class="btn" id="archiveBrand" title="${isArchived(brand) ? 'Move back to active brands' : 'Hide from All Brands totals and the main list'}">${isArchived(brand) ? '↺ Unarchive' : '🗄 Archive'}</button><button class="btn" id="editBrand">Brand Settings</button>` : ''}
@@ -466,6 +501,7 @@ function render() {
       </div>
       <div class="filters">
         <select id="period" aria-label="Period">
+          ${contractRange(brandKpi(brand)) ? `<option value="contract" ${S.period === 'contract' ? 'selected' : ''}>Contract Period</option>` : ''}
           ${[['all', 'All Time'], ['this', 'This Month'], ['last', 'Last Month'], ['7', 'Last 7 Days'], ['14', 'Last 14 Days'], ['30', 'Last 30 Days'], ['90', 'Last 90 Days'], ['year', 'This Year'], ['month', 'Select Month…'], ['range', 'Custom Range…']]
             .map(([v, l]) => `<option value="${v}" ${S.period === v ? 'selected' : ''}>${l}</option>`).join('')}
         </select>
@@ -485,8 +521,9 @@ function render() {
         ${tile('Shares', sum.shares, manualNote, false, psum.shares)}
         ${tile('Saves', sum.saves, manualNote, false, psum.saves)}
         <div class="tile"><div class="lab">Engagement Rate</div><div class="val">${pct(sum.er)}</div>${CMP ? delta(sum.er, psum.er, 'pt') : ''}<div class="note">engagements ÷ views</div></div>
-        <div class="tile"><div class="lab">Contents ≥ ${brand ? cf.format(target) + ' Views' : 'Views Target'}</div><div class="val">${nf.format(sum.hit)}<span style="font-size:14px;font-weight:500;color:var(--text-3)"> / ${nf.format(sum.withData)}</span></div>${CMP ? delta(sum.hit, psum.hit) : ''}<div class="note">${sum.withData ? pct(sum.hit / sum.withData) + ' of contents with data' : ''}</div></div>
+        <div class="tile"><div class="lab">Contents ≥ ${brand ? targetText(brand) + ' Views' : 'Views Target'}</div><div class="val">${nf.format(sum.hit)}<span style="font-size:14px;font-weight:500;color:var(--text-3)"> / ${nf.format(sum.withData)}</span></div>${CMP ? delta(sum.hit, psum.hit) : ''}<div class="note">${sum.withData ? pct(sum.hit / sum.withData) + ' of contents with data' : ''}</div></div>
       </div>
+      ${brand ? kpiCard(brand) : ''}
       <section class="card">
         <header><h2>Views by Posting Month</h2><div class="legend">${Object.entries(PLAT).filter(([k]) => S.platforms.has(k)).map(([k, l]) => `<span><i class="dot" style="background:var(--${k})"></i>${l}</span>`).join('')}</div></header>
         <div class="body"><div class="chartwrap" id="chart"></div></div>
@@ -501,6 +538,47 @@ function render() {
   </div>`;
   renderChart(list); renderMonthly(list); if (S.brandId === 'all') renderBrandTable(list); renderContents(list);
   bind(list);
+}
+// ---------------------------------------------------------------- Contract & KPI (dari blok KPI macrosheets)
+function kpiStats(b) {
+  const k = brandKpi(b);
+  if (!k) return null;
+  const mine = S.contents.filter((c) => c.brand_id === b.id);
+  const inContract = mine.filter((c) => { const d = dayKey(c.posted_at); return d && inPeriods(k, d); });
+  const month = todayKey().slice(0, 7);
+  const byPlat = (list) => Object.fromEntries(Object.keys(PLAT).map((p) => [p, list.filter((c) => c.platform === p).length]));
+  const posted = byPlat(inContract), thisMonth = byPlat(mine.filter((c) => dayKey(c.posted_at)?.startsWith(month)));
+  const fyp = Object.entries(k.platforms || {}).filter(([, v]) => v.kpi).map(([p, v]) => ({
+    p, target: v.kpi, fyp: v.fyp ?? b.views_target ?? 10000,
+    hits: inContract.filter((c) => c.platform === p && (c.views || 0) >= (v.fyp ?? b.views_target ?? 10000)).length }));
+  return { k, posted, thisMonth, fyp, postedMax: Math.max(0, ...Object.values(posted)), monthMax: Math.max(0, ...Object.values(thisMonth)) };
+}
+const progress = (v, max) => `<div class="kbar"><i style="width:${max ? Math.min(100, (v / max) * 100) : 0}%"${v >= max ? ' class="done"' : ''}></i></div>`;
+function kpiCard(b) {
+  const st = kpiStats(b);
+  if (!st) return `<section class="card"><header><h2>Contract &amp; KPI</h2></header><div class="body sub">No KPI block in the macrosheets for this brand yet.</div></section>`;
+  const { k } = st, f = k.fields || {};
+  const cr = contractRange(k);
+  const today = todayKey();
+  const left = cr ? Math.ceil((Date.parse(cr[1]) - Date.parse(today)) / 86400000) : null;
+  const period = cr ? `${k.periods.map(([a, z]) => `${dateLabel(a)} – ${dateLabel(z)}`).join(', ')}${k.period_year_assumed ? ' <span class="badge mute" title="The macrosheets has no year; the most recent matching year is assumed">year assumed</span>' : ''}`
+    : esc(f.period || '–');
+  const info = [['Contract', esc(f.contract || '–')], ['Contract period', period + (cr ? `<div class="sub">${left > 0 ? `${left} days left` : left === 0 ? 'Ends today' : `Ended ${-left} days ago`}</div>` : '')],
+    ['Quantity', esc(f.quantity || '–')], ['Total video', esc(f.total_video || '–')], ['PM', esc(f.pm || '–')], ['Scriptwriter', esc(f.scriptwriter || '–')],
+    ['Master drive', k.master_drive_url ? `<a href="${esc(k.master_drive_url)}" target="_blank" rel="noopener">${esc(f.master_drive || 'Open')}</a>` : esc(f.master_drive || '–')],
+    ...(f.notes ? [['Notes', esc(f.notes)]] : [])];
+  const platsUsed = Object.keys(PLAT).filter((p) => st.posted[p] || st.thisMonth[p]);
+  const perPlat = (o) => platsUsed.map((p) => `${PLAT[p]} ${o[p]}`).join(' · ');
+  const rows = [];
+  if (k.total_videos) rows.push(['Videos posted in contract', `${nf.format(st.postedMax)} / ${nf.format(k.total_videos)}`, progress(st.postedMax, k.total_videos), perPlat(st.posted) + (cr ? '' : ' · contract period not set, counting all time')]);
+  if (k.quantity_per_month) rows.push([`Posted this month (${MONTH_NAMES[+today.slice(5, 7) - 1]})`, `${nf.format(st.monthMax)} / ${nf.format(k.quantity_per_month)}`, progress(st.monthMax, k.quantity_per_month), perPlat(st.thisMonth)]);
+  for (const x of st.fyp) rows.push([`KPI FYP · ${PLAT[x.p]} ≥ ${cf.format(x.fyp)} views`, `${nf.format(x.hits)} / ${nf.format(x.target)}`, progress(x.hits, x.target),
+    x.hits >= x.target ? '<span class="badge good">Achieved</span>' : `${nf.format(x.target - x.hits)} more needed${cr ? '' : ' · counting all time'}`]);
+  return `<section class="card kpi"><header><h2>Contract &amp; KPI</h2><span class="sub">From the macrosheets tab “${esc(k.tab || b.name)}”</span></header>
+    <div class="body kpi-grid">
+      <dl>${info.map(([l, v]) => `<div><dt>${l}</dt><dd>${v}</dd></div>`).join('')}</dl>
+      <div class="kpi-progress">${rows.length ? rows.map(([l, v, bar, note]) => `<div class="krow"><div class="kl"><span>${l}</span><b class="num">${v}</b></div>${bar}<div class="sub">${note}</div></div>`).join('') : '<div class="sub">No numeric KPI (Quantity, Total Video or KPI FYP) in the macrosheets yet.</div>'}</div>
+    </div></section>`;
 }
 function tile(label, value, note = '', hero = false, prev) {
   return `<div class="tile${hero ? ' hero' : ''}"><div class="lab">${label}</div><div class="val" title="${nf.format(value)}">${value >= 100000 ? cf.format(value) : nf.format(value)}</div>${prev !== undefined ? delta(value, prev) : ''}<div class="note">${note}</div></div>`;
@@ -611,8 +689,12 @@ function renderMonthly(list) {
 function renderBrandTable(list) {
   const prevList = CMP ? filtered(CMP.prev) : [];
   const rows = countedBrands().map((b) => ({ b, s: summarize(list.filter((c) => c.brand_id === b.id)), p: CMP ? summarize(prevList.filter((c) => c.brand_id === b.id)) : null })).sort((a, z) => z.s.views - a.s.views);
-  $('#brandTable').innerHTML = `<table><thead><tr><th>Brand</th>${SUM_HEAD}${CMP ? `<th title="Compared with ${esc(CMP.label)}">Views vs Previous</th>` : ''}</tr></thead><tbody>
-    ${rows.map(({ b, s, p }) => `<tr class="clickable" data-brand="${b.id}"><td>${esc(b.name)}${isArchived(b) ? ' <span class="badge mute">Archived</span>' : ''}</td>${sumCells(s)}${CMP ? `<td class="num">${shortDelta(s.views, p.views)}</td>` : ''}</tr>`).join('')}</tbody></table>`;
+  const anyKpi = rows.some(({ b }) => kpiStats(b)?.fyp.length);
+  const kpiCell = (b) => { const st = kpiStats(b); if (!st || !st.fyp.length) return '<td class="num" style="color:var(--text-3)">–</td>';
+    const h = st.fyp.reduce((a, x) => a + x.hits, 0), t = st.fyp.reduce((a, x) => a + x.target, 0);
+    return `<td class="num" title="${st.fyp.map((x) => `${PLAT[x.p]}: ${x.hits}/${x.target} contents ≥ ${nf.format(x.fyp)} views`).join(', ')}">${h >= t ? '<span class="badge good">' : ''}${h} / ${t}${h >= t ? '</span>' : ''}</td>`; };
+  $('#brandTable').innerHTML = `<table><thead><tr><th>Brand</th>${SUM_HEAD}${CMP ? `<th title="Compared with ${esc(CMP.label)}">Views vs Previous</th>` : ''}${anyKpi ? '<th title="Contents reaching the FYP Quantity during the contract, versus KPI FYP">Contract KPI FYP</th>' : ''}</tr></thead><tbody>
+    ${rows.map(({ b, s, p }) => `<tr class="clickable" data-brand="${b.id}"><td>${esc(b.name)}${isArchived(b) ? ' <span class="badge mute">Archived</span>' : ''}</td>${sumCells(s)}${CMP ? `<td class="num">${shortDelta(s.views, p.views)}</td>` : ''}${anyKpi ? kpiCell(b) : ''}</tr>`).join('')}</tbody></table>`;
 }
 
 function statusBadge(c) {
@@ -736,17 +818,28 @@ async function doRefresh(ids) {
 function loadScript(src) {
   return new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => fail(new Error('Could not load ' + src)); document.head.append(s); });
 }
+const sheetUrls = (cfg) => (cfg?.urls || (cfg?.url ? [cfg.url] : [])).filter(Boolean);
+const sheetIdOf = (u) => (String(u).match(/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/) || [])[1];
 async function syncSheet(silent = false) {
   const cfg = S.settings.sheet;
-  if (!LIVE || !cfg?.url) return null;
+  if (!LIVE || !sheetUrls(cfg).length) return null;
   if (!window.XLSX) await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
-  const tabs = XSheet.parseWorkbook(window.XLSX, await DB.downloadSheet(cfg.url), cfg.exclude_tabs || []);
   const stats = { at: new Date().toISOString(), brands: 0, added: 0, updated: 0 };
+  for (const url of sheetUrls(cfg)) {
+  const sid = sheetIdOf(url);
+  const tabs = XSheet.parseWorkbook(window.XLSX, await DB.downloadSheet(url), cfg.exclude_tabs || []);
   for (const tab of tabs) {
     const norm = (t) => String(t || '').trim().toLowerCase();
     let brand = S.brands.find((b) => norm(b.sheet_tab || b.name) === norm(tab.tab));
-    if (!brand) { brand = await DB.addBrand({ name: tab.tab.trim(), sheet_tab: tab.tab, sheet_hidden: !!tab.hidden }); stats.brands++; }
-    else if (!!brand.sheet_hidden !== !!tab.hidden) await DB.updateBrand(brand.id, { sheet_hidden: !!tab.hidden });
+    if (!brand) { brand = await DB.addBrand({ name: tab.tab.trim(), sheet_tab: tab.tab, sheet_hidden: !!tab.hidden, sheet_state: { [sid]: !!tab.hidden }, kpi: tab.kpi ? { [sid]: { ...tab.kpi, tab: tab.tab, hidden: !!tab.hidden } } : {} }); stats.brands++; }
+    else {
+      // Diarsipkan hanya bila tab-nya tersembunyi di semua macrosheets tempat brand ini muncul.
+      const state = { ...(brand.sheet_state || {}), [sid]: !!tab.hidden };
+      const kpi = { ...(brand.kpi || {}) };
+      if (tab.kpi) kpi[sid] = { ...tab.kpi, tab: tab.tab, hidden: !!tab.hidden }; else delete kpi[sid];
+      const patch = { sheet_state: state, sheet_hidden: Object.values(state).every(Boolean), kpi };
+      if (JSON.stringify(patch) !== JSON.stringify({ sheet_state: brand.sheet_state || {}, sheet_hidden: !!brand.sheet_hidden, kpi: brand.kpi || {} })) await DB.updateBrand(brand.id, patch);
+    }
     const byKey = new Map();
     for (const c of S.contents) if (c.brand_id === brand.id) { byKey.set(c.platform + ':' + c.external_id, c); for (const a of c.aliases || []) byKey.set(c.platform + ':' + a, c); }
     const fresh = [], patches = [];
@@ -764,7 +857,7 @@ async function syncSheet(silent = false) {
         const patch = {};
         if (JSON.stringify(snap) !== JSON.stringify(Object.fromEntries(METRICS.map((k) => [k, cur.sheet?.[k] ?? null])))) patch.sheet = snap;
         if (cur.source === 'none') patch.source = 'sheet';
-        if ((cur.source === 'sheet' || cur.source === 'none') && l.sheet.posted_at && (!cur.posted_at || Date.parse(cur.posted_at) !== Date.parse(l.sheet.posted_at))) patch.posted_at = l.sheet.posted_at;
+        if ((cur.source === 'sheet' || cur.source === 'none' || !cur.posted_at) && l.sheet.posted_at && (!cur.posted_at || Date.parse(cur.posted_at) !== Date.parse(l.sheet.posted_at))) patch.posted_at = l.sheet.posted_at;
         if (Object.keys(patch).length) patches.push([cur.id, patch]);
       }
     }
@@ -773,6 +866,7 @@ async function syncSheet(silent = false) {
     stats.added += fresh.length; stats.updated += patches.length;
     if (!silent) toast(`Syncing Sheet… ${tab.tab}`);
   }
+  }
   stats.last_added_at = stats.added ? stats.at : S.settings.sheet_last_sync?.last_added_at || null;
   await DB.setSetting('sheet_last_sync', stats);
   if (stats.added) DB.kick();
@@ -780,7 +874,7 @@ async function syncSheet(silent = false) {
 }
 async function autoSync() {
   const last = S.settings.sheet_last_sync?.at;
-  if (!LIVE || !S.settings.sheet?.url || (last && Date.now() - Date.parse(last) < 6 * 3600000)) return;
+  if (!LIVE || !sheetUrls(S.settings.sheet).length || (last && Date.now() - Date.parse(last) < 6 * 3600000)) return;
   try { const s = await syncSheet(true); if (s && (s.added || s.brands)) { toast(`Sheet synced: ${s.added} new links.`); render(); } }
   catch (e) { console.warn('Sheet sync failed', e); }
 }
@@ -818,11 +912,12 @@ function reportData(list) {
     period: range ? `${dateLabel(range[0] === '0000-01-01' ? null : range[0])} – ${dateLabel(range[1] === '9999-12-31' ? null : range[1])}` : 'All time',
     platforms: plats.length === Object.keys(PLAT).length ? 'All platforms' : plats.map((p) => PLAT[p]).join(', '),
     generated: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
-    target: brand ? `${nf.format(target)} views per content` : 'Set per brand',
+    target: brand ? `${targetText(brand)} views per content` : 'Set per brand (FYP Quantity per platform where available)',
+    kpi: brand ? kpiMeta(brand) : null,
     scope: brand ? (isArchived(brand) ? 'Archived brand' : 'Active brand') : S.includeArchived ? 'All brands, including archived' : 'Active brands only (archived excluded)',
     search: S.q.trim(),
   };
-  const hitLabel = brand ? `Contents with ${cf.format(target)}+ views` : 'Contents hitting views target';
+  const hitLabel = brand ? `Contents with ${targetText(brand)}+ views` : 'Contents hitting views target';
   return {
     meta,
     file: `xander-${slug(meta.title)}-${slug(meta.period === 'All time' ? 'all-time' : range[0] + '-' + range[1])}-${todayKey()}`,
@@ -857,8 +952,20 @@ function changeText(k) {
 }
 const kpiHead = (d) => (d.cmp ? ['Metric', 'Value', `Previous (${d.cmp})`, 'Change'] : ['Metric', 'Value']);
 const kpiRows = (d) => d.kpis.map((k) => (d.cmp ? [k[0], kpiText(k), fmtCell(k[4], k[2]), changeText(k)] : [k[0], kpiText(k)]));
-const metaLines = (d) => [['Brands', d.meta.scope], ['Period (posting date)', d.meta.period], ...(d.cmp ? [['Compared with', d.cmp]] : []), ['Platforms', d.meta.platforms], ['Views target', d.meta.target], ...(d.meta.search ? [['Search filter', d.meta.search]] : []), ['Generated', d.meta.generated]];
+const metaLines = (d) => [...(d.meta.kpi || []), ['Brands', d.meta.scope], ['Period (posting date)', d.meta.period], ...(d.cmp ? [['Compared with', d.cmp]] : []), ['Platforms', d.meta.platforms], ['Views target', d.meta.target], ...(d.meta.search ? [['Search filter', d.meta.search]] : []), ['Generated', d.meta.generated]];
 
+function kpiMeta(b) {
+  const st = kpiStats(b);
+  if (!st) return [];
+  const f = st.k.fields || {}, out = [];
+  if (f.contract) out.push(['Contract', f.contract]);
+  if (st.k.periods?.length) out.push(['Contract period', st.k.periods.map(([a, z]) => `${dateLabel(a)} – ${dateLabel(z)}`).join(', ')]);
+  else if (f.period) out.push(['Contract period', f.period]);
+  if (st.k.total_videos) out.push(['Videos posted in contract', `${st.postedMax} of ${st.k.total_videos}`]);
+  if (st.k.quantity_per_month) out.push(['Posted this month', `${st.monthMax} of ${st.k.quantity_per_month}`]);
+  for (const x of st.fyp) out.push([`KPI FYP ${PLAT[x.p]} (>= ${nf.format(x.fyp)} views)`, `${x.hits} of ${x.target}${x.hits >= x.target ? ' - achieved' : ''}`]);
+  return out;
+}
 // ---- Excel
 async function exportXlsx(d) {
   await needLibs('xlsx');
@@ -892,16 +999,17 @@ async function exportPdf(d) {
   const clean = (s) => String(s).replace(/[–—]/g, '-').replace(/[^\x20-\x7E -ÿ]/g, '');
   const W = doc.internal.pageSize.getWidth(), M = 36;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text(clean(`Content Performance Report - ${d.meta.title}`), M, 48);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90);
-  doc.text(clean(metaLines(d).map(([k, v]) => `${k}: ${v}`).join('   |   ')), M, 66, { maxWidth: W - 2 * M });
-  doc.setTextColor(0);
+  doc.setFont('helvetica', 'normal');
+  const rightHead = (data) => { if (data.section === 'head' && data.column.index > 0) data.cell.styles.halign = 'right'; };
   const opts = { margin: { left: M, right: M }, styles: { fontSize: 8, cellPadding: 4 }, headStyles: { fillColor: [29, 79, 168] }, theme: 'striped' };
+  doc.autoTable({ margin: { left: M, right: M }, startY: 58, theme: 'plain', body: metaLines(d).map(([k, v]) => [clean(k), clean(v)]),
+    styles: { fontSize: 8.5, cellPadding: 1.5, textColor: 70 }, columnStyles: { 0: { fontStyle: 'bold', cellWidth: 190 } } });
   const heading = (t, y) => { doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text(t, M, y); doc.setFont('helvetica', 'normal'); return y + 8; };
   const next = () => doc.lastAutoTable.finalY + 28;
-  doc.autoTable({ ...opts, startY: 84, head: [d.kpis.map((k) => clean(k[0]))], body: [d.kpis.map((k) => clean(kpiText(k))), ...(d.cmp ? [d.kpis.map((k) => clean(`${changeText(k)} vs ${d.cmp}`))] : [])], styles: { fontSize: 9, cellPadding: 6 } });
+  doc.autoTable({ ...opts, startY: doc.lastAutoTable.finalY + 12, head: [d.kpis.map((k) => clean(k[0]))], body: [d.kpis.map((k) => clean(kpiText(k))), ...(d.cmp ? [d.kpis.map((k) => clean(`${changeText(k)} vs ${d.cmp}`))] : [])], styles: { fontSize: 9, cellPadding: 6 } });
   const numRight = (from) => Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i + from, { halign: 'right' }]));
-  doc.autoTable({ ...opts, startY: heading('Performance by Posting Month', next()), head: [['Posting Month', ...d.statHead]], body: d.monthly.map((r) => [r[0], ...statText(r.slice(1))]), columnStyles: numRight(1) });
-  if (d.brands) doc.autoTable({ ...opts, startY: heading('Brand Comparison', next()), head: [['Brand', ...d.statHead]], body: d.brands.map((r) => [clean(r[0]), ...statText(r.slice(1))]), columnStyles: numRight(1) });
+  doc.autoTable({ ...opts, startY: heading('Performance by Posting Month', next()), head: [['Posting Month', ...d.statHead]], body: d.monthly.map((r) => [r[0], ...statText(r.slice(1))]), columnStyles: numRight(1), didParseCell: rightHead });
+  if (d.brands) doc.autoTable({ ...opts, startY: heading('Brand Comparison', next()), head: [['Brand', ...d.statHead]], body: d.brands.map((r) => [clean(r[0]), ...statText(r.slice(1))]), columnStyles: numRight(1), didParseCell: rightHead });
   doc.addPage();
   doc.autoTable({ ...opts, startY: heading(`Content List (${nf.format(d.contents.length)})`, 40),
     head: [['Brand', 'Platform', 'Title', 'Posted', 'Views', 'Likes', 'Comments', 'Shares', 'Saves', 'ER']],
@@ -1124,12 +1232,12 @@ function renderTv() {
   }
   $('#root').innerHTML = `<div class="tv" id="tv">
     <div class="tv-head"><div><h1>${esc(brand ? brand.name : 'All Brands')}</h1>
-      <div class="sub">${periodText}${CMP ? ` (vs ${CMP.label})` : ''} · ${plats.length === 3 ? 'All Platforms' : plats.map((p) => PLAT[p]).join(', ')}${brand ? ` · Views target ${nf.format(target)}` : ` · ${countedBrands().length} brands${S.includeArchived ? ' incl. archived' : ''}`}${cs?.at ? ` · Data updated ${ago(cs.at)}` : ''}</div></div>
+      <div class="sub">${periodText}${CMP ? ` (vs ${CMP.label})` : ''} · ${plats.length === 3 ? 'All Platforms' : plats.map((p) => PLAT[p]).join(', ')}${brand ? ` · Views target ${targetText(brand)}` : ` · ${countedBrands().length} brands${S.includeArchived ? ' incl. archived' : ''}`}${cs?.at ? ` · Data updated ${ago(cs.at)}` : ''}</div></div>
       <div class="tv-clock" id="tvClock"></div></div>
     <div class="tv-kpis">
       ${k('Total Views', big(sum.views), '', delta(sum.views, ps.views))}${k('Contents', nf.format(sum.n), '', delta(sum.n, ps.n))}${k('Likes', big(sum.likes), '', delta(sum.likes, ps.likes))}${k('Comments', big(sum.comments), '', delta(sum.comments, ps.comments))}
       ${k('Shares', big(sum.shares), '', delta(sum.shares, ps.shares))}${k('Saves', big(sum.saves), '', delta(sum.saves, ps.saves))}${k('Engagement Rate', pct(sum.er), '', delta(sum.er, ps.er, 'pt'))}
-      ${k(brand ? `≥ ${cf.format(target)} Views` : '≥ Views Target', `${nf.format(sum.hit)}`, sum.withData ? `${pct(sum.hit / sum.withData)} of contents` : '', delta(sum.hit, ps.hit))}
+      ${k(brand ? `≥ ${targetText(brand)} Views` : '≥ Views Target', `${nf.format(sum.hit)}`, sum.withData ? `${pct(sum.hit / sum.withData)} of contents` : '', delta(sum.hit, ps.hit))}
     </div>
     <div class="tv-body">
       <section class="card"><header><h2>Views by Posting Month</h2><div class="legend">${plats.map((p) => `<span><i class="dot" style="background:var(--${p})"></i>${PLAT[p]}</span>`).join('')}</div></header><div class="chartwrap" id="chart"></div></section>
@@ -1188,7 +1296,7 @@ const FOOT = (extra = '') => `<div class="foot"><span>${extra}</span><span><butt
 function brandDialog(b) {
   dialog(`<h3>${b ? 'Brand Settings' : 'New Brand'}</h3>
     <label>Brand name<input name="name" required value="${esc(b?.name)}"></label>
-    <label>Views target per content<input name="target" type="number" min="1" step="1" required value="${b?.views_target ?? 10000}"></label>
+    <label>Default views target per content (used when the macrosheets has no FYP Quantity)<input name="target" type="number" min="1" step="1" required value="${b?.views_target ?? 10000}"></label>
     <label>Google Sheets tab name (optional, if different from the brand name)<input name="tab" value="${esc(b?.sheet_tab)}"></label>
     ${b ? `<label>Status<select name="arch">
       <option value="sheet" ${b.archived_override == null ? 'selected' : ''}>Follow Google Sheets (tab is ${b.sheet_hidden ? 'hidden → Archived' : 'visible → Active'})</option>
@@ -1266,9 +1374,9 @@ async function settingsDialog() {
   const me = LIVE ? (await DB.sb.auth.getUser()).data.user?.email || '' : '';
   const line = (p) => (cs?.[p] ? `${PLAT[p]}: ${cs[p].ok} succeeded, ${cs[p].failed} failed, ${cs[p].unavailable} unavailable${cs[p].error ? ` — ${esc(cs[p].error)}` : ''}` : '');
   dialog(`<h3>Data Sources &amp; Settings</h3>
-    <label>Google Sheets link (access: “Anyone with the link: Viewer”)<input name="url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" value="${esc(sh.url)}"></label>
+    <label>Macrosheets links — one per line (access: “Anyone with the link: Viewer”)<textarea name="url" style="min-height:70px" placeholder="https://docs.google.com/spreadsheets/d/…">${esc(sheetUrls(sh).join('\n'))}</textarea></label>
     <label>Tabs to skip (comma-separated)<input name="skip" value="${esc((sh.exclude_tabs || ['Credential Brand', 'List Reporting']).join(', '))}"></label>
-    <div class="hint">Every other tab is treated as one brand. New links and numbers in the Sheet reach the dashboard automatically, usually within 15 minutes (tabs are checked in rotation); “Save &amp; Sync Now” checks every tab right away.<br>
+    <div class="hint">Every other tab is treated as one brand; a brand with the same tab name in several macrosheets is merged. New links, numbers, hidden tabs (archive) and the KPI block reach the dashboard automatically, one macrosheets after another (about every 15–30 minutes per tab); “Save &amp; Sync Now” reads every macrosheets right away.<br>
       ${ls?.at ? `Last checked ${ago(ls.at)}${ls.last_added_at ? ` · last new link added ${ago(ls.last_added_at)}` : ''}.` : 'Not synced yet.'}${S.settings.sheet_sync_error ? `<br><span style="color:var(--bad)">Auto sync failed ${ago(S.settings.sheet_sync_error.at)}: ${esc(S.settings.sheet_sync_error.error)}</span>` : ''}</div>
     <label>YouTube API key ${priv.youtube_api_key ? '(saved — leave empty to keep it)' : '(not set — without it YouTube often fails and comments stay empty)'}<input name="yt" type="password" autocomplete="off" placeholder="${priv.youtube_api_key ? '••••••••' : 'AIza…'}"></label>
     <label>Instagram session / “sessionid” cookie ${priv.ig_sessionid ? '(saved)' : '(not set — without it Instagram cannot be fetched automatically)'}<input name="ig" type="password" autocomplete="off" placeholder="${priv.ig_sessionid ? '••••••••' : ''}"></label>
@@ -1277,12 +1385,13 @@ async function settingsDialog() {
     <div class="foot"><span><button class="btn" value="sync">Save &amp; Sync Now</button></span><span><button class="btn" value="cancel" formnovalidate>Cancel</button> <button class="btn primary" value="save">Save</button></span></div>`,
   async (fd, action) => {
     if (!LIVE) { toast('Preview mode: settings are not saved.'); return; }
-    await DB.setSetting('sheet', { url: fd.get('url').trim(), exclude_tabs: fd.get('skip').split(',').map((s) => s.trim()).filter(Boolean) });
+    const urls = [...new Set(fd.get('url').split(/\s+/).map((u) => u.trim()).filter((u) => sheetIdOf(u)))];
+    await DB.setSetting('sheet', { urls, exclude_tabs: fd.get('skip').split(',').map((s) => s.trim()).filter(Boolean) });
     if (fd.get('yt').trim()) await DB.setPrivate('youtube_api_key', fd.get('yt'));
     if (fd.get('ig').trim()) await DB.setPrivate('ig_sessionid', fd.get('ig'));
     await DB.setTeam(fd.get('team').split(/[\s,;]+/), me);
     if (action === 'sync') {
-      if (!fd.get('url').trim()) { toast('Enter the Google Sheets link first.'); return false; }
+      if (!urls.length) { toast('Enter at least one Google Sheets link first.'); return false; }
       toast('Downloading and reading the Sheet…');
       const st = await syncSheet();
       Object.assign(S, await DB.load());

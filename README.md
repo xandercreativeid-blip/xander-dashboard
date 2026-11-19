@@ -34,6 +34,25 @@ per brand, sepanjang waktu, per bulan posting, atau rentang tanggal bebas.
   Keduanya hanya bisa ditulis dari dashboard, tidak bisa dibaca kembali.
 - Bagian Instagram bersifat eksperimental dan belum teruji dengan akun sungguhan.
 
+## Beberapa macrosheets dan blok KPI
+
+- Di **Data Sources & Settings**, isi satu link macrosheets per baris. Semua macrosheets dibaca bergantian
+  (5 tab tiap 2 menit). Tab dengan nama sama di beberapa macrosheets digabung menjadi satu brand.
+- Blok KPI di atas tabel tiap tab (Contract, Quantity, Total Video/Goal, Month Start-End, PM, Scriptwriter,
+  Master Drive, Notes, dan tabel Platform | FYP Quantity | KPI FYP) dibaca otomatis dan tampil di kartu
+  **Contract & KPI** pada halaman brand. Bila blok itu belum ada, kartunya dikosongkan.
+- **FYP Quantity** per platform menjadi target views konten; target default brand hanya dipakai bila tidak ada.
+- **KPI FYP** dihitung per kontrak: jumlah konten yang diposting dalam periode kontrak (Month Start-End) dan
+  mencapai FYP Quantity. Periode tanpa tahun (mis. "OCT-MAR") memakai tahun terdekat dan ditandai "year assumed".
+- Pilihan periode **Contract Period** muncul untuk brand yang periode kontraknya terbaca.
+
+## Perbandingan periode
+
+Untuk setiap periode (kecuali All Time dan Contract Period), angka dibandingkan dengan periode sebelumnya yang
+panjangnya sama (▲ naik / ▼ turun). Periode yang masih berjalan (This Month, This Year) dibandingkan dengan jumlah
+hari yang sama di periode sebelumnya. Catatan: views terus bertambah, jadi konten yang lebih lama wajar punya
+views lebih besar.
+
 ## Brand diarsipkan
 
 - Tab brand yang disembunyikan (hide) di macrosheets otomatis menjadi **Archived** di dashboard; tampilkan lagi tab-nya

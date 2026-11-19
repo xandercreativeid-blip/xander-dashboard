@@ -136,3 +136,7 @@ create trigger contents_merge_metrics before insert or update on contents
 alter table brands add column if not exists sheet_hidden boolean not null default false;
 alter table brands add column if not exists archived_override boolean;
 alter table brands add column if not exists archived boolean generated always as (coalesce(archived_override, sheet_hidden)) stored;
+
+-- Blok KPI dan status tab per macrosheets ({ "<sheet id>": ... }).
+alter table brands add column if not exists kpi jsonb not null default '{}'::jsonb;
+alter table brands add column if not exists sheet_state jsonb not null default '{}'::jsonb;
