@@ -366,7 +366,9 @@ function setPref(k, v) { S[k] = v; try { localStorage.setItem('xd.' + k, JSON.st
 // Brand diarsipkan bila tab-nya disembunyikan di macrosheets, kecuali diatur manual di Brand Settings.
 const isArchived = (b) => !!(b && (b.archived ?? b.archived_override ?? b.sheet_hidden));
 // Brand yang ikut dihitung di tampilan All Brands.
-const countedBrands = () => S.brands.filter((b) => S.includeArchived || !isArchived(b));
+// TV Mode bisa dibatasi ke brand dari satu macrosheets saja (TV.sheet = id macrosheets).
+const inTvSheet = (b) => !TV.on || !TV.sheet || !!(b && b.sheet_state && TV.sheet in b.sheet_state);
+const countedBrands = () => S.brands.filter((b) => (S.includeArchived || !isArchived(b)) && inTvSheet(b));
 // Blok KPI macrosheets untuk brand ini (bila brand ada di beberapa macrosheets, pilih yang punya tabel FYP
 // dan tab-nya tidak disembunyikan).
 function brandKpi(b) {
@@ -441,6 +443,7 @@ function filtered(rangeOverride) {
   return S.contents.filter((c) => {
     if (S.brandId !== 'all' && c.brand_id !== S.brandId) return false;
     if (S.brandId === 'all' && !S.includeArchived && isArchived(S.brandMap.get(c.brand_id))) return false;
+    if (S.brandId === 'all' && !inTvSheet(S.brandMap.get(c.brand_id))) return false;
     if (!S.platforms.has(c.platform)) return false;
     if (range) { const k = dayKey(c.posted_at); if (!k || k < range[0] || k > range[1]) return false; }
     return true;
@@ -1130,11 +1133,12 @@ function exportDialog(list) {
 
 // ---------------------------------------------------------------- TV mode (layar TV / monitor kantor)
 // Bisa dibuka langsung lewat link, mis. …/index.html?tv=1&rotate=30&period=this
-const TV = { on: false, rotate: 0, seq: [], idx: 0, timer: null, clock: null, started: 0, pointerTimer: null };
+const TV = { on: false, sheet: '', rotate: 0, seq: [], idx: 0, timer: null, clock: null, started: 0, pointerTimer: null };
 const PERIOD_KEYS = ['all', 'this', 'last', '7', '14', '30', '90', 'year'];
-function tvLink(brand, rotate) {
+function tvLink(brand, rotate, sheet) {
   const u = new URL(location.href.split('?')[0]);
   u.searchParams.set('tv', '1');
+  if (sheet) u.searchParams.set('sheet', sheet);
   if (rotate) u.searchParams.set('rotate', String(rotate)); else if (brand && brand !== 'all') u.searchParams.set('brand', S.brandMap.get(brand)?.name || '');
   if (S.period !== 'all' && PERIOD_KEYS.includes(S.period)) u.searchParams.set('period', S.period);
   const plats = Object.keys(PLAT).filter((p) => S.platforms.has(p));
@@ -1142,29 +1146,35 @@ function tvLink(brand, rotate) {
   return u.toString();
 }
 function tvDialog() {
-  const brands = [...S.brands].filter((b) => !isArchived(b)).sort((a, b) => a.name.localeCompare(b.name, 'en'));
+  const sids = sheetUrls(S.settings.sheet).map(sheetIdOf).filter(Boolean);
+  const whatOpts = (sid) => {
+    const brands = [...S.brands].filter((b) => !isArchived(b) && (!sid || (b.sheet_state && sid in b.sheet_state))).sort((a, b) => a.name.localeCompare(b.name, 'en'));
+    const all = sid ? `All brands of ${esc(sheetTitle(sid))}` : 'All Brands';
+    return `<option value="rotate">Rotate: ${all}, then each ${S.includeArchived ? '' : 'active '}brand</option>
+      <option value="all" ${S.brandId === 'all' ? 'selected' : ''}>${all} only</option>
+      ${brands.map((b) => `<option value="${b.id}" ${S.brandId === b.id ? 'selected' : ''}>${esc(b.name)} only</option>`).join('')}`;
+  };
   const d = dialog(`<h3>TV Mode</h3>
     <div class="hint">A full-screen view for an office TV or monitor. Numbers refresh automatically every 3 minutes. Uses the current period and platform filter.</div>
-    <label>Show<select name="what">
-      <option value="rotate">Rotate: All Brands, then each ${S.includeArchived ? '' : 'active '}brand</option>
-      <option value="all" ${S.brandId === 'all' ? 'selected' : ''}>All Brands only</option>
-      ${brands.map((b) => `<option value="${b.id}" ${S.brandId === b.id ? 'selected' : ''}>${esc(b.name)} only</option>`).join('')}
-    </select></label>
+    ${sids.length > 1 ? `<label>Macrosheets<select name="sheet"><option value="">All macrosheets</option>${sids.map((sid) => `<option value="${sid}" ${TV.sheet === sid ? 'selected' : ''}>${esc(sheetTitle(sid))} (${S.brands.filter((b) => !isArchived(b) && b.sheet_state && sid in b.sheet_state).length} brands)</option>`).join('')}</select></label>` : ''}
+    <label>Show<select name="what">${whatOpts(sids.length > 1 ? TV.sheet : '')}</select></label>
     <label>Seconds per screen (rotation)<select name="sec">${[15, 30, 60, 120].map((n) => `<option ${n === 30 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
     <label>Link for the TV (open it once in the TV browser and bookmark it)<input name="link" readonly></label>
     <div class="foot"><span><button class="btn" value="copy" type="button" id="tvCopy">Copy link</button></span><span><button class="btn" value="cancel" formnovalidate>Cancel</button> <button class="btn primary" value="start">Start TV Mode</button></span></div>`,
   async (fd) => {
     const what = fd.get('what'), sec = +fd.get('sec');
-    startTv(what === 'rotate' ? 'all' : what, what === 'rotate' ? sec : 0, true);
+    startTv(what === 'rotate' ? 'all' : what, what === 'rotate' ? sec : 0, true, fd.get('sheet') || '');
     return false;
   });
-  const upd = () => { $('input[name=link]', d).value = tvLink($('select[name=what]', d).value === 'rotate' ? 'all' : $('select[name=what]', d).value, $('select[name=what]', d).value === 'rotate' ? +$('select[name=sec]', d).value : 0); };
+  const sheetSel = $('select[name=sheet]', d);
+  const upd = () => { const w = $('select[name=what]', d).value; $('input[name=link]', d).value = tvLink(w === 'rotate' ? 'all' : w, w === 'rotate' ? +$('select[name=sec]', d).value : 0, sheetSel ? sheetSel.value : ''); };
+  if (sheetSel) sheetSel.addEventListener('change', () => { $('select[name=what]', d).innerHTML = whatOpts(sheetSel.value); upd(); });
   $('select[name=what]', d).addEventListener('change', upd); $('select[name=sec]', d).addEventListener('change', upd); upd();
   $('#tvCopy', d).addEventListener('click', async () => { try { await navigator.clipboard.writeText($('input[name=link]', d).value); toast('Link copied.'); } catch { $('input[name=link]', d).select(); } });
 }
-function startTv(brandId, rotate, fullscreen) {
+function startTv(brandId, rotate, fullscreen, sheet) {
   document.querySelector('dialog[open]')?.close();
-  Object.assign(TV, { on: true, rotate, idx: 0 });
+  Object.assign(TV, { on: true, rotate, idx: 0, sheet: sheet || '' });
   S.brandId = brandId; S.q = '';
   tvSequence();
   if (fullscreen && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
@@ -1181,7 +1191,7 @@ function tvSequence() {
 }
 function stopTv() {
   if (!TV.on) return;
-  TV.on = false; clearInterval(TV.timer); clearInterval(TV.clock);
+  TV.on = false; TV.sheet = ''; clearInterval(TV.timer); clearInterval(TV.clock);
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   if (new URL(location.href).searchParams.has('tv')) history.replaceState(null, '', location.pathname);
   render();
@@ -1222,7 +1232,8 @@ function renderTv() {
   const plats = Object.keys(PLAT).filter((p) => S.platforms.has(p));
   const cs = [S.settings.collector_status, S.settings.collector_heartbeat].filter((x) => x?.at).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
   const nextId = TV.rotate ? TV.seq[(TV.idx + 1) % TV.seq.length] : null;
-  const nextName = nextId === 'all' ? 'All Brands' : S.brandMap.get(nextId)?.name || '';
+  const allName = TV.sheet ? `${sheetTitle(TV.sheet)} · All Brands` : 'All Brands';
+  const nextName = nextId === 'all' ? allName : S.brandMap.get(nextId)?.name || '';
   const big = (v) => (v >= 100000 ? cf.format(v) : nf.format(v));
   const k = (label, val, note = '', d = '') => `<div class="tile"><div class="lab">${label}</div><div class="val">${val}</div>${d}<div class="note">${note}</div></div>`;
   let side;
@@ -1238,7 +1249,7 @@ function renderTv() {
     side = `${kc}<section class="card"><header><h2>Top Contents by Views</h2></header><ol class="tv-list">${top.map((c, i) => `<li><span class="rank">${i + 1}</span><span class="name">${esc(c.title || c.url.replace(/^https:\/\/(www\.)?/, ''))}<small><i class="dot" style="background:var(--${c.platform})"></i> ${PLAT[c.platform]} · ${dateLabel(dayKey(c.posted_at))}</small></span><span class="v">${big(c.views)}<small>ER ${pct(erOf(c))}</small></span></li>`).join('') || '<li><span></span><span class="name">No contents yet</span><span></span></li>'}</ol></section>`;
   }
   $('#root').innerHTML = `<div class="tv" id="tv">
-    <div class="tv-head"><div><h1>${esc(brand ? brand.name : 'All Brands')}</h1>
+    <div class="tv-head"><div><h1>${esc(brand ? brand.name : allName)}</h1>
       <div class="sub">${periodText}${CMP ? ` (vs ${CMP.label})` : ''} · ${plats.length === 3 ? 'All Platforms' : plats.map((p) => PLAT[p]).join(', ')}${brand ? ` · Views target ${targetText(brand)}` : ` · ${countedBrands().length} brands${S.includeArchived ? ' incl. archived' : ''}`}${cs?.at ? ` · Data updated ${ago(cs.at)}` : ''}</div></div>
       <div class="tv-clock" id="tvClock"></div></div>
     <div class="tv-kpis">
@@ -1279,7 +1290,8 @@ function tvFromUrl() {
   if (PLAT[q.get('platform')]) S.platforms = new Set([q.get('platform')]);
   const b = q.get('brand') && S.brands.find((x) => x.name.toLowerCase() === q.get('brand').toLowerCase());
   const rotate = Math.max(0, Math.min(600, +q.get('rotate') || 0));
-  startTv(b ? b.id : 'all', b ? 0 : rotate, false);
+  const sheet = sheetUrls(S.settings.sheet).map(sheetIdOf).includes(q.get('sheet')) ? q.get('sheet') : '';
+  startTv(b ? b.id : 'all', b ? 0 : rotate, false, sheet);
 }
 
 // ---------------------------------------------------------------- dialogs
