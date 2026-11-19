@@ -1232,7 +1232,7 @@ function renderTv() {
   const plats = Object.keys(PLAT).filter((p) => S.platforms.has(p));
   const cs = [S.settings.collector_status, S.settings.collector_heartbeat].filter((x) => x?.at).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
   const nextId = TV.rotate ? TV.seq[(TV.idx + 1) % TV.seq.length] : null;
-  const allName = TV.sheet ? `${sheetTitle(TV.sheet)} · All Brands` : 'All Brands';
+  const allName = 'All Brands';   // nama macrosheets tidak ditampilkan di layar TV
   const nextName = nextId === 'all' ? allName : S.brandMap.get(nextId)?.name || '';
   const big = (v) => (v >= 100000 ? cf.format(v) : nf.format(v));
   const k = (label, val, note = '', d = '') => `<div class="tile"><div class="lab">${label}</div><div class="val">${val}</div>${d}<div class="note">${note}</div></div>`;
