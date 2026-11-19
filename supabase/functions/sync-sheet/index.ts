@@ -166,12 +166,19 @@ async function sync() {
   return stats;
 }
 
-Deno.serve(async () => {
+// Dipanggil terjadwal (pg_cron) dan dari tombol "Save & Sync Now" di dashboard (butuh izin CORS).
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
-    return new Response(JSON.stringify(await sync()), { headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify(await sync()), { headers: { ...CORS, "Content-Type": "application/json" } });
   } catch (e) {
     const error = String((e as Error).message);
     await sb.from("settings").upsert({ key: "sheet_sync_error", value: { at: new Date().toISOString(), error } });
-    return new Response(JSON.stringify({ error }), { status: 500, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error }), { status: 500, headers: { ...CORS, "Content-Type": "application/json" } });
   }
 });

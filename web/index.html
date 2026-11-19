@@ -236,7 +236,8 @@ function ago(iso) {
 }
 function toast(msg) {
   document.querySelectorAll('.toast').forEach((t) => t.remove());
-  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.append(t);
+  // Di dalam jendela yang sedang terbuka (bila ada), supaya tidak tertutup oleh jendela itu.
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; (document.querySelector('dialog[open]') || document.body).append(t);
   setTimeout(() => t.remove(), 4500);
 }
 
@@ -844,7 +845,7 @@ function loadScript(src) {
 const sheetUrls = (cfg) => (cfg?.urls || (cfg?.url ? [cfg.url] : [])).filter(Boolean);
 const sheetIdOf = (u) => (String(u).match(/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/) || [])[1];
 // "Sync Now": jalankan sinkron server berulang sampai setiap macrosheets selesai dibaca sekali.
-async function syncSheet(silent = false) {
+async function syncSheet(silent = false, onProgress) {
   if (!LIVE || !sheetUrls(S.settings.sheet).length) return null;
   const { data } = await DB.sb.auth.getSession();
   const total = { added: 0, updated: 0, removed: 0, brands: 0, renamed: [] }, done = new Set();
@@ -856,7 +857,8 @@ async function syncSheet(silent = false) {
     if (st.skipped) break;
     for (const k of ['added', 'updated', 'removed', 'brands']) total[k] += st[k] || 0;
     total.renamed.push(...(st.renamed || []));
-    if (!silent) toast(`Syncing macrosheets ${st.sheet} of ${st.sheets}… ${st.tabs.join(', ')}`);
+    const msg = `Reading macrosheets ${st.sheet} of ${st.sheets} (${sheetTitle(sheetUrls(S.settings.sheet).map(sheetIdOf)[st.sheet - 1] || '')}): ${st.tabs.join(', ')}`;
+    if (onProgress) onProgress(msg, total); else if (!silent) toast(msg);
     if (st.done) done.add(st.sheet);
     if (done.size >= st.sheets) break;
   }
@@ -1413,6 +1415,7 @@ async function settingsDialog() {
     <label>Instagram session / “sessionid” cookie ${priv.ig_sessionid ? '(saved)' : '(not set — without it Instagram cannot be fetched automatically)'}<input name="ig" type="password" autocomplete="off" placeholder="${priv.ig_sessionid ? '••••••••' : ''}"></label>
     <label>Team members allowed to open the dashboard (one email per line). Each member creates their own account via “Create Account” on the sign-in page.<textarea name="team" style="min-height:84px">${esc(team.join('\n'))}</textarea></label>
     <div class="hint"><b>Last data update:</b> ${cs?.at ? `${ago(cs.at)} — ${cs.queued} contents processed.<br>${['tiktok', 'instagram', 'youtube'].map(line).filter(Boolean).join('<br>')}` : 'no record yet.'}</div>
+    <div class="hint" id="syncProgress" hidden style="white-space:pre-line;border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--text)"></div>
     <div class="foot"><span><button class="btn" value="sync">Save &amp; Sync Now</button></span><span><button class="btn" value="cancel" formnovalidate>Cancel</button> <button class="btn primary" value="save">Save</button></span></div>`,
   async (fd, action) => {
     if (!LIVE) { toast('Preview mode: settings are not saved.'); return; }
@@ -1423,8 +1426,14 @@ async function settingsDialog() {
     await DB.setTeam(fd.get('team').split(/[\s,;]+/), me);
     if (action === 'sync') {
       if (!urls.length) { toast('Enter at least one Google Sheets link first.'); return false; }
-      toast('Downloading and reading the Sheet…');
-      const st = await syncSheet();
+      const dlg = document.querySelector('dialog[open]');
+      const box = dlg.querySelector('#syncProgress');
+      dlg.querySelectorAll('button, input, textarea').forEach((x) => (x.disabled = true));
+      box.hidden = false; box.textContent = 'Starting… this can take a minute or two.';
+      let st;
+      try {
+        st = await syncSheet(false, (msg, t) => { box.textContent = `${msg}\n${t.added} new links · ${t.updated} updated · ${t.removed} removed so far`; });
+      } finally { dlg.querySelectorAll('button, input, textarea').forEach((x) => (x.disabled = false)); box.hidden = true; }
       Object.assign(S, await DB.load());
       toast(`Sync complete: ${st.added} new links, ${st.brands} new brands, ${st.updated} updated, ${st.removed} removed${st.renamed.length ? `, renamed: ${st.renamed.join(', ')}` : ''}.`);
     } else toast('Settings saved.');
