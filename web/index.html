@@ -73,6 +73,11 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .tile .val { font-size: 24px; font-weight: 650; letter-spacing: -.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .tile .note { color: var(--text-3); font-size: 12px; min-height: 17px; }
 .tile.hero { border-color: var(--text); }
+.delta { font-size: 12px; font-weight: 600; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.delta.up { color: var(--good); }
+.delta.down { color: var(--bad); }
+.delta.flat { color: var(--text-3); }
+td .delta { display: inline; font-size: 11.5px; margin-left: 6px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-top: 14px; }
 .card > header { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; padding: 12px 14px 0; }
 .card h2 { font-size: 15px; margin: 0; }
@@ -129,13 +134,14 @@ textarea { min-height: 150px; resize: vertical; font-family: ui-monospace, Menlo
 .tv-kpis .lab { font-size: 1.7vh; }
 .tv-kpis .val { font-size: 4.4vh; }
 .tv-kpis .note { font-size: 1.5vh; min-height: 0; }
+.tv-kpis .delta { font-size: 1.6vh; margin-top: .3vh; }
 .tv-body { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 1.2vw; min-height: 0; }
 .tv-body .card { margin: 0; display: flex; flex-direction: column; min-height: 0; }
 .tv-body .card > header h2 { font-size: 2.2vh; }
 .tv-body .legend { font-size: 1.6vh; }
 .tv-body #chart { flex: 1; min-height: 0; margin: 1vh 1vw 1.4vh; }
 .tv-list { list-style: none; margin: 0; padding: .6vh 1vw 1vh; display: grid; gap: .2vh; overflow: hidden; }
-.tv-list li { display: grid; grid-template-columns: 3.4vh minmax(0, 1fr) auto; align-items: center; gap: .8vw; padding: 1vh 0; border-top: 1px solid var(--line); font-size: 2vh; }
+.tv-list li { display: grid; grid-template-columns: 3.4vh minmax(0, 1fr) auto; align-items: center; gap: .8vw; padding: .75vh 0; border-top: 1px solid var(--line); font-size: 2vh; }
 .tv-list li:first-child { border-top: 0; }
 .tv-list .rank { color: var(--text-3); font-variant-numeric: tabular-nums; }
 .tv-list .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -345,8 +351,37 @@ function periodRange() {
     default: return null;
   }
 }
-function filtered() {
-  const range = periodRange();
+// Periode pembanding: panjang yang sama, tepat sebelum periode terpilih. Periode yang masih berjalan
+// (bulan ini, tahun ini) dibandingkan dengan jumlah hari yang sama di periode sebelumnya.
+function comparison() {
+  const t = todayKey();
+  const DAY = 86400000, d = (k) => Date.parse(k + 'T00:00:00Z'), k = (ms) => new Date(ms).toISOString().slice(0, 10);
+  const monthEnd = (ym) => { const [yy, mm] = ym.split('-').map(Number); return `${ym}-${String(new Date(Date.UTC(yy, mm, 0)).getUTCDate()).padStart(2, '0')}`; };
+  const prevMonth = (ym) => { const [yy, mm] = ym.split('-').map(Number); return new Date(Date.UTC(yy, mm - 2, 1)).toISOString().slice(0, 7); };
+  const sameDayIn = (ym, day) => `${ym}-${String(Math.min(day, +monthEnd(ym).slice(8))).padStart(2, '0')}`;
+  const r = periodRange();
+  if (!r) return null;
+  let cur = [...r], prev, label;
+  const monthMode = S.period === 'this' || S.period === 'last' || (S.period === 'month' && S.month);
+  if (monthMode) {
+    const ym = r[0].slice(0, 7), pm = prevMonth(ym);
+    if (cur[1] > t) { cur[1] = t; prev = [pm + '-01', sameDayIn(pm, +t.slice(8))]; label = `${MONTH_NAMES[+pm.slice(5) - 1]} 1–${+prev[1].slice(8)}`; }
+    else { prev = [pm + '-01', monthEnd(pm)]; label = monthLabel(pm); }
+  } else if (S.period === 'year') {
+    const y = +r[0].slice(0, 4);
+    if (cur[1] > t) cur[1] = t;
+    prev = [`${y - 1}-01-01`, `${y - 1}${cur[1].slice(4)}`]; label = cur[1] === r[1] ? String(y - 1) : `${y - 1} to ${MONTH_NAMES[+cur[1].slice(5, 7) - 1]} ${+cur[1].slice(8)}`;
+  } else {
+    if (cur[0] === '0000-01-01' || cur[1] === '9999-12-31') return null;
+    if (cur[1] > t) cur[1] = t;
+    const len = Math.round((d(cur[1]) - d(cur[0])) / DAY) + 1;
+    prev = [k(d(cur[0]) - len * DAY), k(d(cur[0]) - DAY)];
+    label = S.period === '7' || S.period === '14' || S.period === '30' || S.period === '90' ? `previous ${len} days` : `${dateLabel(prev[0])} – ${dateLabel(prev[1])}`;
+  }
+  return { cur, prev, label };
+}
+function filtered(rangeOverride) {
+  const range = rangeOverride || periodRange();
   return S.contents.filter((c) => {
     if (S.brandId !== 'all' && c.brand_id !== S.brandId) return false;
     if (S.brandId === 'all' && !S.includeArchived && isArchived(S.brandMap.get(c.brand_id))) return false;
@@ -372,8 +407,10 @@ function render() {
   if (S.brandId !== 'all' && !S.brandMap.has(S.brandId)) S.brandId = 'all';
   if (TV.on) return renderTv();
   const brand = S.brandMap.get(S.brandId);
-  const list = filtered();
+  CMP = comparison();
+  const list = filtered(CMP && CMP.cur);
   const sum = summarize(list);
+  const psum = CMP ? summarize(filtered(CMP.prev)) : {};
   const counts = new Map();
   for (const c of S.contents) counts.set(c.brand_id, (counts.get(c.brand_id) || 0) + 1);
   const brandsSorted = [...S.brands].sort((a, b) => a.name.localeCompare(b.name, 'en'));
@@ -384,7 +421,7 @@ function render() {
   const allCount = S.contents.filter((c) => S.includeArchived || !isArchived(S.brandMap.get(c.brand_id))).length;
   const brandBtn = (b) => `<button data-brand="${b.id}" aria-current="${S.brandId === b.id}"><span class="name">${esc(b.name)}</span><small>${nf.format(counts.get(b.id) || 0)}</small></button>`;
   const target = brand ? brand.views_target : null;
-  const range = periodRange();
+  const range = CMP ? CMP.cur : periodRange();
   const periodText = range ? `${dateLabel(range[0] === '0000-01-01' ? null : range[0])} – ${dateLabel(range[1] === '9999-12-31' ? null : range[1])}` : 'All time';
   const manualPl = ['instagram', 'youtube'].filter((p) => S.platforms.has(p)).map((p) => PLAT[p]);
   const manualNote = !manualPl.length ? 'TikTok + Sheet, highest value' : manualPl.length === 2 && S.platforms.has('tiktok') ? 'IG &amp; YouTube: manual input (Sheet)' : manualPl.join(' &amp; ') + ': manual input (Sheet)';
@@ -439,16 +476,16 @@ function render() {
           ${Object.entries(PLAT).map(([k, l]) => `<button class="chip" data-plat="${k}" aria-pressed="${S.platforms.size === 1 && S.platforms.has(k)}"><i class="dot" style="background:var(--${k})"></i>${l}</button>`).join('')}
         </div>
         ${!brand && archivedAll.length ? `<button class="chip" id="inclArchived" aria-pressed="${S.includeArchived}" title="Count archived brands in All Brands totals">${S.includeArchived ? '✓ ' : ''}Include archived brands</button>` : ''}
-        <span class="sub">Posting date: ${periodText}</span>
+        <span class="sub">Posting date: ${periodText}${CMP ? ` · ▲▼ compared with ${CMP.label}` : ''}</span>
       </div>
       <div class="tiles">
-        ${tile('Total Views', sum.views, `${nf.format(sum.n)} contents`, true)}
-        ${tile('Likes', sum.likes)}
-        ${tile('Comments', sum.comments)}
-        ${tile('Shares', sum.shares, manualNote)}
-        ${tile('Saves', sum.saves, manualNote)}
-        <div class="tile"><div class="lab">Engagement Rate</div><div class="val">${pct(sum.er)}</div><div class="note">engagements ÷ views</div></div>
-        <div class="tile"><div class="lab">Contents ≥ ${brand ? cf.format(target) + ' Views' : 'Views Target'}</div><div class="val">${nf.format(sum.hit)}<span style="font-size:14px;font-weight:500;color:var(--text-3)"> / ${nf.format(sum.withData)}</span></div><div class="note">${sum.withData ? pct(sum.hit / sum.withData) + ' of contents with data' : ''}</div></div>
+        ${tile('Total Views', sum.views, `${nf.format(sum.n)} contents${CMP ? ` · previous ${nf.format(psum.n)}` : ''}`, true, psum.views)}
+        ${tile('Likes', sum.likes, '', false, psum.likes)}
+        ${tile('Comments', sum.comments, '', false, psum.comments)}
+        ${tile('Shares', sum.shares, manualNote, false, psum.shares)}
+        ${tile('Saves', sum.saves, manualNote, false, psum.saves)}
+        <div class="tile"><div class="lab">Engagement Rate</div><div class="val">${pct(sum.er)}</div>${CMP ? delta(sum.er, psum.er, 'pt') : ''}<div class="note">engagements ÷ views</div></div>
+        <div class="tile"><div class="lab">Contents ≥ ${brand ? cf.format(target) + ' Views' : 'Views Target'}</div><div class="val">${nf.format(sum.hit)}<span style="font-size:14px;font-weight:500;color:var(--text-3)"> / ${nf.format(sum.withData)}</span></div>${CMP ? delta(sum.hit, psum.hit) : ''}<div class="note">${sum.withData ? pct(sum.hit / sum.withData) + ' of contents with data' : ''}</div></div>
       </div>
       <section class="card">
         <header><h2>Views by Posting Month</h2><div class="legend">${Object.entries(PLAT).filter(([k]) => S.platforms.has(k)).map(([k, l]) => `<span><i class="dot" style="background:var(--${k})"></i>${l}</span>`).join('')}</div></header>
@@ -465,8 +502,30 @@ function render() {
   renderChart(list); renderMonthly(list); if (S.brandId === 'all') renderBrandTable(list); renderContents(list);
   bind(list);
 }
-function tile(label, value, note = '', hero = false) {
-  return `<div class="tile${hero ? ' hero' : ''}"><div class="lab">${label}</div><div class="val" title="${nf.format(value)}">${value >= 100000 ? cf.format(value) : nf.format(value)}</div><div class="note">${note}</div></div>`;
+function tile(label, value, note = '', hero = false, prev) {
+  return `<div class="tile${hero ? ' hero' : ''}"><div class="lab">${label}</div><div class="val" title="${nf.format(value)}">${value >= 100000 ? cf.format(value) : nf.format(value)}</div>${prev !== undefined ? delta(value, prev) : ''}<div class="note">${note}</div></div>`;
+}
+// Tanda naik/turun dibanding periode sebelumnya. kind 'pt' = selisih poin persentase (untuk ER).
+function delta(cur, prev, kind) {
+  if (!CMP || prev === null || prev === undefined || cur === null || cur === undefined) return '';
+  const title = `Previous (${CMP.label}): ${kind === 'pt' ? pct(prev) : nf.format(prev)}`;
+  if (kind === 'pt') {
+    const diff = (cur - prev) * 100;
+    if (Math.abs(diff) < 0.005) return `<div class="delta flat" title="${title}">● no change</div>`;
+    return `<div class="delta ${diff > 0 ? 'up' : 'down'}" title="${title}">${diff > 0 ? '▲' : '▼'} ${Math.abs(diff).toFixed(2)} pt</div>`;
+  }
+  if (cur === prev) return `<div class="delta flat" title="${title}">● no change</div>`;
+  if (!prev) return `<div class="delta up" title="${title}">▲ new</div>`;
+  const ch = (cur - prev) / prev;
+  return `<div class="delta ${ch > 0 ? 'up' : 'down'}" title="${title}">${ch > 0 ? '▲' : '▼'} ${Math.abs(ch * 100) >= 1000 ? cf.format(Math.abs(ch * 100)) : Math.abs(ch * 100).toFixed(1)}%</div>`;
+}
+let CMP = null;
+function shortDelta(cur, prev) {
+  if (!prev && !cur) return '<span class="delta flat">–</span>';
+  if (!prev) return '<span class="delta up">▲ new</span>';
+  const ch = (cur - prev) / prev;
+  if (Math.abs(ch) < 0.0005) return '<span class="delta flat">● 0%</span>';
+  return `<span class="delta ${ch > 0 ? 'up' : 'down'}" title="Previous: ${nf.format(prev)}">${ch > 0 ? '▲' : '▼'} ${Math.abs(ch * 100) >= 1000 ? cf.format(Math.abs(ch * 100)) : Math.abs(ch * 100).toFixed(1)}%</span>`;
 }
 
 function byMonth(list) {
@@ -550,9 +609,10 @@ function renderMonthly(list) {
   </tbody></table>`;
 }
 function renderBrandTable(list) {
-  const rows = countedBrands().map((b) => ({ b, s: summarize(list.filter((c) => c.brand_id === b.id)) })).sort((a, z) => z.s.views - a.s.views);
-  $('#brandTable').innerHTML = `<table><thead><tr><th>Brand</th>${SUM_HEAD}</tr></thead><tbody>
-    ${rows.map(({ b, s }) => `<tr class="clickable" data-brand="${b.id}"><td>${esc(b.name)}${isArchived(b) ? ' <span class="badge mute">Archived</span>' : ''}</td>${sumCells(s)}</tr>`).join('')}</tbody></table>`;
+  const prevList = CMP ? filtered(CMP.prev) : [];
+  const rows = countedBrands().map((b) => ({ b, s: summarize(list.filter((c) => c.brand_id === b.id)), p: CMP ? summarize(prevList.filter((c) => c.brand_id === b.id)) : null })).sort((a, z) => z.s.views - a.s.views);
+  $('#brandTable').innerHTML = `<table><thead><tr><th>Brand</th>${SUM_HEAD}${CMP ? `<th title="Compared with ${esc(CMP.label)}">Views vs Previous</th>` : ''}</tr></thead><tbody>
+    ${rows.map(({ b, s, p }) => `<tr class="clickable" data-brand="${b.id}"><td>${esc(b.name)}${isArchived(b) ? ' <span class="badge mute">Archived</span>' : ''}</td>${sumCells(s)}${CMP ? `<td class="num">${shortDelta(s.views, p.views)}</td>` : ''}</tr>`).join('')}</tbody></table>`;
 }
 
 function statusBadge(c) {
@@ -745,9 +805,11 @@ function saveBlob(blob, name) {
 // Semua angka laporan, mengikuti filter yang sedang aktif (brand, periode, platform, pencarian).
 function reportData(list) {
   const brand = S.brandMap.get(S.brandId);
-  const range = periodRange();
+  CMP = comparison();
+  const range = CMP ? CMP.cur : periodRange();
   const plats = Object.keys(PLAT).filter((p) => S.platforms.has(p));
   const sum = summarize(list);
+  const ps = CMP ? summarize(filtered(CMP.prev)) : null;
   const target = brand ? brand.views_target : null;
   const statRow = (s) => [s.n, s.views, s.likes, s.comments, s.shares, s.saves, s.er, s.hit];
   const contents = sortedContents(list);
@@ -764,10 +826,11 @@ function reportData(list) {
   return {
     meta,
     file: `xander-${slug(meta.title)}-${slug(meta.period === 'All time' ? 'all-time' : range[0] + '-' + range[1])}-${todayKey()}`,
+    cmp: CMP ? CMP.label : null,
     kpis: [
-      ['Total Views', sum.views, 'int'], ['Contents', sum.n, 'int'], ['Likes', sum.likes, 'int'], ['Comments', sum.comments, 'int'],
-      ['Shares', sum.shares, 'int'], ['Saves', sum.saves, 'int'], ['Engagement Rate', sum.er, 'pct'],
-      [hitLabel, sum.hit, 'int', sum.withData ? `${nf.format(sum.hit)} of ${nf.format(sum.withData)} (${pct(sum.hit / sum.withData)})` : '0'],
+      ['Total Views', sum.views, 'int', undefined, ps?.views], ['Contents', sum.n, 'int', undefined, ps?.n], ['Likes', sum.likes, 'int', undefined, ps?.likes], ['Comments', sum.comments, 'int', undefined, ps?.comments],
+      ['Shares', sum.shares, 'int', undefined, ps?.shares], ['Saves', sum.saves, 'int', undefined, ps?.saves], ['Engagement Rate', sum.er, 'pct', undefined, ps?.er],
+      [hitLabel, sum.hit, 'int', sum.withData ? `${nf.format(sum.hit)} of ${nf.format(sum.withData)} (${pct(sum.hit / sum.withData)})` : '0', ps?.hit],
     ],
     statHead: ['Contents', 'Views', 'Likes', 'Comments', 'Shares', 'Saves', 'ER', 'Hit Target'],
     monthly: byMonth(list).filter((m) => m.items.length).reverse().map((m) => [monthLabel(m.ym), ...statRow(summarize(m.items))]),
@@ -784,7 +847,17 @@ const fmtCell = (v, kind) => (v === null || v === undefined || v === '' ? '–' 
 const statText = (r) => r.map((v, i) => fmtCell(v, i === 7 ? 'int' : i === 6 ? 'pct' : 'int'));
 const contentText = (r) => r.map((v, i) => (i === 10 ? fmtCell(v, 'pct') : i >= 5 && i <= 9 ? fmtCell(v) : v || '–'));
 const kpiText = (k) => (k[3] !== undefined ? k[3] : fmtCell(k[1], k[2]));
-const metaLines = (d) => [['Brands', d.meta.scope], ['Period (posting date)', d.meta.period], ['Platforms', d.meta.platforms], ['Views target', d.meta.target], ...(d.meta.search ? [['Search filter', d.meta.search]] : []), ['Generated', d.meta.generated]];
+// Perubahan dibanding periode sebelumnya, sebagai teks (mis. "+12.4%", "-0.21 pt").
+function changeText(k) {
+  const cur = k[1], prev = k[4];
+  if (prev === undefined || prev === null || cur === null || cur === undefined) return '–';
+  if (k[2] === 'pct') { const d = (cur - prev) * 100; return `${d >= 0 ? '+' : '-'}${Math.abs(d).toFixed(2)} pt`; }
+  if (!prev) return cur ? 'new' : '0%';
+  const ch = (cur - prev) / prev * 100; return `${ch >= 0 ? '+' : '-'}${Math.abs(ch).toFixed(1)}%`;
+}
+const kpiHead = (d) => (d.cmp ? ['Metric', 'Value', `Previous (${d.cmp})`, 'Change'] : ['Metric', 'Value']);
+const kpiRows = (d) => d.kpis.map((k) => (d.cmp ? [k[0], kpiText(k), fmtCell(k[4], k[2]), changeText(k)] : [k[0], kpiText(k)]));
+const metaLines = (d) => [['Brands', d.meta.scope], ['Period (posting date)', d.meta.period], ...(d.cmp ? [['Compared with', d.cmp]] : []), ['Platforms', d.meta.platforms], ['Views target', d.meta.target], ...(d.meta.search ? [['Search filter', d.meta.search]] : []), ['Generated', d.meta.generated]];
 
 // ---- Excel
 async function exportXlsx(d) {
@@ -800,11 +873,11 @@ async function exportXlsx(d) {
     }
     return ws;
   };
-  const summary = [[`Content Performance Report — ${d.meta.title}`], ['Xander Creative Agency'], [], ...metaLines(d), [], ['Metric', 'Value'],
-    ...d.kpis.map((k) => [k[0], k[2] === 'pct' ? k[1] : k[1]]), ...(d.kpis[7][3] ? [['Hit rate', d.kpis[7][3]]] : [])];
-  const ws1 = sheet(summary, [34, 40]);
+  const summary = [[`Content Performance Report — ${d.meta.title}`], ['Xander Creative Agency'], [], ...metaLines(d), [], kpiHead(d),
+    ...d.kpis.map((k) => (d.cmp ? [k[0], k[1], k[4] ?? '', changeText(k)] : [k[0], k[1]])), ...(d.kpis[7][3] ? [['Hit rate', d.kpis[7][3]]] : [])];
+  const ws1 = sheet(summary, [34, 40, 26, 12]);
   const erRow = summary.findIndex((r) => r[0] === 'Engagement Rate');
-  if (erRow >= 0 && ws1[X.utils.encode_cell({ r: erRow, c: 1 })]) ws1[X.utils.encode_cell({ r: erRow, c: 1 })].z = '0.00%';
+  for (const c of [1, 2]) if (erRow >= 0 && ws1[X.utils.encode_cell({ r: erRow, c })]) ws1[X.utils.encode_cell({ r: erRow, c })].z = '0.00%';
   X.utils.book_append_sheet(wb, ws1, 'Summary');
   X.utils.book_append_sheet(wb, sheet([['Posting Month', ...d.statHead], ...d.monthly], [16, 10, 14, 12, 12, 12, 12, 9, 11], [7]), 'Monthly');
   if (d.brands) X.utils.book_append_sheet(wb, sheet([['Brand', ...d.statHead], ...d.brands], [28, 10, 14, 12, 12, 12, 12, 9, 11], [7]), 'Brands');
@@ -825,7 +898,7 @@ async function exportPdf(d) {
   const opts = { margin: { left: M, right: M }, styles: { fontSize: 8, cellPadding: 4 }, headStyles: { fillColor: [29, 79, 168] }, theme: 'striped' };
   const heading = (t, y) => { doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text(t, M, y); doc.setFont('helvetica', 'normal'); return y + 8; };
   const next = () => doc.lastAutoTable.finalY + 28;
-  doc.autoTable({ ...opts, startY: 84, head: [d.kpis.map((k) => clean(k[0]))], body: [d.kpis.map((k) => clean(kpiText(k)))], styles: { fontSize: 9, cellPadding: 6 } });
+  doc.autoTable({ ...opts, startY: 84, head: [d.kpis.map((k) => clean(k[0]))], body: [d.kpis.map((k) => clean(kpiText(k))), ...(d.cmp ? [d.kpis.map((k) => clean(`${changeText(k)} vs ${d.cmp}`))] : [])], styles: { fontSize: 9, cellPadding: 6 } });
   const numRight = (from) => Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i + from, { halign: 'right' }]));
   doc.autoTable({ ...opts, startY: heading('Performance by Posting Month', next()), head: [['Posting Month', ...d.statHead]], body: d.monthly.map((r) => [r[0], ...statText(r.slice(1))]), columnStyles: numRight(1) });
   if (d.brands) doc.autoTable({ ...opts, startY: heading('Brand Comparison', next()), head: [['Brand', ...d.statHead]], body: d.brands.map((r) => [clean(r[0]), ...statText(r.slice(1))]), columnStyles: numRight(1) });
@@ -854,7 +927,7 @@ async function exportDocx(d) {
     new D.Paragraph({ text: `Content Performance Report — ${d.meta.title}`, heading: D.HeadingLevel.TITLE }),
     new D.Paragraph({ children: [new D.TextRun({ text: 'Xander Creative Agency', color: '666666' })], spacing: { after: 200 } }),
     ...metaLines(d).map(([k, v]) => new D.Paragraph({ children: [new D.TextRun({ text: `${k}: `, bold: true }), new D.TextRun(v)] })),
-    h('Key Metrics'), table(['Metric', 'Value'], d.kpis.map((k) => [k[0], kpiText(k)])),
+    h('Key Metrics'), table(kpiHead(d), kpiRows(d)),
     h('Performance by Posting Month'), table(['Posting Month', ...d.statHead], d.monthly.map((r) => [r[0], ...statText(r.slice(1))])),
     ...(d.brands ? [h('Brand Comparison'), table(['Brand', ...d.statHead], d.brands.map((r) => [r[0], ...statText(r.slice(1))]))] : []),
     h(d.contents.length > top.length ? `Contents (first ${top.length} of ${nf.format(d.contents.length)}, in dashboard order)` : 'Contents'),
@@ -892,7 +965,9 @@ async function exportPptx(d) {
     s.addShape(pptx.ShapeType.roundRect, { x, y, w: 2.9, h: 2.1, fill: { color: 'F3F4F6' }, line: { color: 'E5E7EB' }, rectRadius: 0.08 });
     s.addText(k[0], { x: x + 0.2, y: y + 0.2, w: 2.5, h: 0.5, fontSize: 12, color: MUTED, fontFace: 'Calibri' });
     s.addText(k[2] === 'pct' ? pct(k[1]) : k[1] >= 100000 ? cf.format(k[1]) : nf.format(k[1]), { x: x + 0.2, y: y + 0.75, w: 2.5, h: 0.8, fontSize: 30, bold: true, color: INK, fontFace: 'Calibri' });
-    if (k[3]) s.addText(k[3], { x: x + 0.2, y: y + 1.5, w: 2.5, h: 0.4, fontSize: 10, color: MUTED, fontFace: 'Calibri' });
+    const ch = d.cmp ? changeText(k) : '';
+    const sub = [k[3], ch && ch !== '–' ? `${ch} vs ${d.cmp}` : ''].filter(Boolean).join('\n');
+    if (sub) s.addText(sub, { x: x + 0.2, y: y + 1.45, w: 2.5, h: 0.55, fontSize: 10, color: ch.startsWith('-') ? 'B3261E' : ch.startsWith('+') || ch === 'new' ? '1B7A3D' : MUTED, fontFace: 'Calibri' });
   });
 
   if (d.monthlyByPlatform.length) {
@@ -917,7 +992,7 @@ function exportMd(d) {
   const esc2 = (v) => String(v).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const mdTable = (head, rows) => [`| ${head.join(' | ')} |`, `| ${head.map((_, i) => (i ? '---:' : '---')).join(' | ')} |`, ...rows.map((r) => `| ${r.map(esc2).join(' | ')} |`)].join('\n');
   const out = [`# Content Performance Report — ${d.meta.title}`, '', '_Xander Creative Agency_', '', ...metaLines(d).map(([k, v]) => `- **${k}:** ${v}`), '',
-    '## Key Metrics', '', mdTable(['Metric', 'Value'], d.kpis.map((k) => [k[0], kpiText(k)])), '',
+    '## Key Metrics', '', mdTable(kpiHead(d), kpiRows(d)), '',
     '## Performance by Posting Month', '', mdTable(['Posting Month', ...d.statHead], d.monthly.map((r) => [r[0], ...statText(r.slice(1))])), ''];
   if (d.brands) out.push('## Brand Comparison', '', mdTable(['Brand', ...d.statHead], d.brands.map((r) => [r[0], ...statText(r.slice(1))])), '');
   out.push(`## Contents (${nf.format(d.contents.length)})`, '', mdTable(['Brand', 'Platform', 'Title', 'Posted', 'Views', 'Likes', 'Comments', 'Shares', 'Saves', 'ER'],
@@ -1027,16 +1102,18 @@ function tvTick() {
   }
 }
 function renderTv() {
-  const brand = S.brandMap.get(S.brandId), list = filtered(), sum = summarize(list);
+  const brand = S.brandMap.get(S.brandId);
+  CMP = comparison();
+  const list = filtered(CMP && CMP.cur), sum = summarize(list), ps = CMP ? summarize(filtered(CMP.prev)) : {};
   const target = brand ? brand.views_target : null;
-  const range = periodRange();
+  const range = CMP ? CMP.cur : periodRange();
   const periodText = range ? `${dateLabel(range[0] === '0000-01-01' ? null : range[0])} – ${dateLabel(range[1] === '9999-12-31' ? null : range[1])}` : 'All time';
   const plats = Object.keys(PLAT).filter((p) => S.platforms.has(p));
   const cs = [S.settings.collector_status, S.settings.collector_heartbeat].filter((x) => x?.at).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
   const nextId = TV.rotate ? TV.seq[(TV.idx + 1) % TV.seq.length] : null;
   const nextName = nextId === 'all' ? 'All Brands' : S.brandMap.get(nextId)?.name || '';
   const big = (v) => (v >= 100000 ? cf.format(v) : nf.format(v));
-  const k = (label, val, note = '') => `<div class="tile"><div class="lab">${label}</div><div class="val">${val}</div><div class="note">${note}</div></div>`;
+  const k = (label, val, note = '', d = '') => `<div class="tile"><div class="lab">${label}</div><div class="val">${val}</div>${d}<div class="note">${note}</div></div>`;
   let side;
   if (!brand) {
     const rows = countedBrands().map((b) => ({ b, s: summarize(list.filter((c) => c.brand_id === b.id)) })).filter((r) => r.s.n).sort((a, z) => z.s.views - a.s.views).slice(0, 8);
@@ -1047,12 +1124,12 @@ function renderTv() {
   }
   $('#root').innerHTML = `<div class="tv" id="tv">
     <div class="tv-head"><div><h1>${esc(brand ? brand.name : 'All Brands')}</h1>
-      <div class="sub">${periodText} · ${plats.length === 3 ? 'All Platforms' : plats.map((p) => PLAT[p]).join(', ')}${brand ? ` · Views target ${nf.format(target)}` : ` · ${countedBrands().length} brands${S.includeArchived ? ' incl. archived' : ''}`}${cs?.at ? ` · Data updated ${ago(cs.at)}` : ''}</div></div>
+      <div class="sub">${periodText}${CMP ? ` (vs ${CMP.label})` : ''} · ${plats.length === 3 ? 'All Platforms' : plats.map((p) => PLAT[p]).join(', ')}${brand ? ` · Views target ${nf.format(target)}` : ` · ${countedBrands().length} brands${S.includeArchived ? ' incl. archived' : ''}`}${cs?.at ? ` · Data updated ${ago(cs.at)}` : ''}</div></div>
       <div class="tv-clock" id="tvClock"></div></div>
     <div class="tv-kpis">
-      ${k('Total Views', big(sum.views))}${k('Contents', nf.format(sum.n))}${k('Likes', big(sum.likes))}${k('Comments', big(sum.comments))}
-      ${k('Shares', big(sum.shares))}${k('Saves', big(sum.saves))}${k('Engagement Rate', pct(sum.er))}
-      ${k(brand ? `≥ ${cf.format(target)} Views` : '≥ Views Target', `${nf.format(sum.hit)}`, sum.withData ? `${pct(sum.hit / sum.withData)} of contents` : '')}
+      ${k('Total Views', big(sum.views), '', delta(sum.views, ps.views))}${k('Contents', nf.format(sum.n), '', delta(sum.n, ps.n))}${k('Likes', big(sum.likes), '', delta(sum.likes, ps.likes))}${k('Comments', big(sum.comments), '', delta(sum.comments, ps.comments))}
+      ${k('Shares', big(sum.shares), '', delta(sum.shares, ps.shares))}${k('Saves', big(sum.saves), '', delta(sum.saves, ps.saves))}${k('Engagement Rate', pct(sum.er), '', delta(sum.er, ps.er, 'pt'))}
+      ${k(brand ? `≥ ${cf.format(target)} Views` : '≥ Views Target', `${nf.format(sum.hit)}`, sum.withData ? `${pct(sum.hit / sum.withData)} of contents` : '', delta(sum.hit, ps.hit))}
     </div>
     <div class="tv-body">
       <section class="card"><header><h2>Views by Posting Month</h2><div class="legend">${plats.map((p) => `<span><i class="dot" style="background:var(--${p})"></i>${PLAT[p]}</span>`).join('')}</div></header><div class="chartwrap" id="chart"></div></section>
