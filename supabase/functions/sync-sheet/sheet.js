@@ -12,8 +12,9 @@
       const dt = new Date(Date.UTC(1899, 11, 30) + Math.round(cell.v) * 86400000);
       [y, m, d] = [dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate()];
     } else if (typeof cell.v === 'string') {
-      const t = cell.v.trim().toLowerCase();
-      if ((x = t.match(/^(\d{1,2})\s+([a-z]+)\.?\s+(\d{4})$/)) && x[2] in MONTHS) [d, m, y] = [+x[1], MONTHS[x[2]], +x[3]];
+      const t = cell.v.trim().toLowerCase().replace(/[^a-z0-9]+$/, '');
+      const mon = (w) => (w in MONTHS ? MONTHS[w] : MONTHS[w.slice(0, 3)] ?? (w.startsWith('ni') ? 10 : undefined));   // salah ketik: "Feburari", "Nivember"
+      if ((x = t.match(/^(\d{1,2})\s+([a-z]+)\.?\s+(\d{4})$/)) && mon(x[2]) !== undefined) [d, m, y] = [+x[1], mon(x[2]), +x[3]];
       else if ((x = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) [y, m, d] = [+x[1], x[2] - 1, +x[3]];
       else if ((x = t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/))) [d, m, y] = [+x[1], x[2] - 1, +x[3]];
       else return null;
@@ -64,14 +65,19 @@
         const p = parseUrl((cell.l && cell.l.Target) || '') || parseUrl(typeof cell.v === 'string' ? cell.v : '');
         if (!p) continue;
         const cols = blockOf(c);
+        // Tabel laporan upload = blok yang punya kolom tanggal atau views; blok lain (mis. "Link Posting" di tracker produksi) bukan laporan.
+        const report = 'posted_at' in cols || 'views' in cols;
         const sheet = { posted_at: 'posted_at' in cols ? parseSheetDate(at(r, cols.posted_at)) : null };
         for (const k of ['views', 'likes', 'comments', 'shares', 'saves']) sheet[k] = k in cols ? cellNum(at(r, cols[k])) : null;
         const id = p.platform + ':' + p.key;
         const prev = found.get(id);
-        if (!prev || (prev.sheet.views === null && sheet.views !== null)) found.set(id, { ...p, sheet });
+        if (!prev || (!prev.report && report) || (prev.report === report && prev.sheet.views === null && sheet.views !== null)) found.set(id, { ...p, sheet, report });
       }
     }
-    return [...found.values()];
+    // Bila tab punya tabel laporan, hanya link di tabel itu yang dihitung sebagai konten terupload.
+    const all = [...found.values()];
+    const out = all.some((l) => l.report) ? all.filter((l) => l.report) : all;
+    return out.map(({ report, ...l }) => l);
   }
 
   // ---------------------------------------------------------------- blok KPI di atas tabel

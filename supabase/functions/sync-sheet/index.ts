@@ -121,33 +121,31 @@ async function sync() {
     const byKey = new Map<string, any>();
     for (const c of contents) { byKey.set(c.platform + ":" + c.external_id, c); for (const a of c.aliases || []) byKey.set(c.platform + ":" + a, c); }
     const fresh: any[] = [], patches: [string, any][] = [];
+    // Snapshot macrosheets per link: angka + Tanggal Upload (tanggal resmi; database memakainya lewat merge_metrics).
+    const snapOf = (l: any) => ({ ...Object.fromEntries(METRICS.map((k) => [k, l.sheet[k]])), posted_at: l.sheet.posted_at });
+    const same = (a: any, b: any) => JSON.stringify(a) === JSON.stringify({ ...Object.fromEntries(METRICS.map((k) => [k, b?.[k] ?? null])), posted_at: b?.posted_at ?? null });
     for (const l of tab.links) {
       const cur = byKey.get(l.platform + ":" + l.key);
       if (cur) seen.push(cur.id);
       const hasData = METRICS.some((k) => l.sheet[k] !== null);
+      const snap = snapOf(l);
       if (!cur) {
-        const base = { brand_id: brand.id, platform: l.platform, external_id: l.key, url: l.url, posted_at: l.sheet.posted_at, sheet_refs: { [sid]: t.name } };
-        fresh.push(hasData
-          ? { ...base, sheet: Object.fromEntries(METRICS.map((k) => [k, l.sheet[k]])), source: "sheet" }
-          : { ...base, source: "none" });
-      } else if (hasData && cur.source === "manual") {
-        // Isian manual di dashboard bertahan sampai angka di macrosheets berubah; setelah itu macrosheets yang dipakai.
-        const snap = Object.fromEntries(METRICS.map((k) => [k, l.sheet[k]]));
+        fresh.push({ brand_id: brand.id, platform: l.platform, external_id: l.key, url: l.url, posted_at: l.sheet.posted_at,
+          sheet_refs: { [sid]: t.name }, sheet: snap, source: hasData ? "sheet" : "none" });
+      } else if (cur.source === "manual") {
+        // Isian manual di dashboard bertahan sampai data link ini berubah di macrosheets; setelah itu macrosheets yang dipakai.
         if (!cur.sheet) patches.push([cur.id, { sheet: snap }]);
-        else if (JSON.stringify(snap) !== JSON.stringify(Object.fromEntries(METRICS.map((k) => [k, cur.sheet?.[k] ?? null])))) patches.push([cur.id, { sheet: snap, source: cur.live ? "auto" : "sheet" }]);
-      } else if (hasData) {
-        // Angka Sheet disimpan di kolom "sheet"; database memilih angka tertinggi antara Sheet dan data langsung.
-        const snap = Object.fromEntries(METRICS.map((k) => [k, l.sheet[k]]));
-        const patch: any = {};
-        if (JSON.stringify(snap) !== JSON.stringify(Object.fromEntries(METRICS.map((k) => [k, cur.sheet?.[k] ?? null])))) patch.sheet = snap;
-        if (cur.source === "none") patch.source = "sheet";
-        if ((cur.source === "sheet" || cur.source === "none" || !cur.posted_at) && l.sheet.posted_at && (!cur.posted_at || Date.parse(cur.posted_at) !== Date.parse(l.sheet.posted_at))) patch.posted_at = l.sheet.posted_at;
-        if (Object.keys(patch).length) patches.push([cur.id, patch]);
+        else if (!same(snap, cur.sheet)) patches.push([cur.id, { sheet: snap, source: cur.live ? "auto" : hasData ? "sheet" : "none" }]);
+      } else if (!same(snap, cur.sheet) || (cur.source === "none" && hasData)) {
+        const patch: any = { sheet: snap };
+        if (cur.source === "none" && hasData) patch.source = "sheet";
+        patches.push([cur.id, patch]);
       }
     }
     for (let i = 0; i < fresh.length; i += 500) {
-      const { error } = await sb.from("contents").upsert(fresh.slice(i, i + 500), { onConflict: "brand_id,platform,external_id", ignoreDuplicates: true });
+      const { data: ins, error } = await sb.from("contents").upsert(fresh.slice(i, i + 500), { onConflict: "brand_id,platform,external_id", ignoreDuplicates: true }).select("id");
       if (error) throw new Error(error.message);
+      for (const r of ins || []) seen.push(r.id);   // link baru juga "masih ada" di tab ini
     }
     for (let i = 0; i < patches.length; i += 10) await Promise.all(patches.slice(i, i + 10).map(([cid, p]) => sb.from("contents").update(p).eq("id", cid)));
     stats.added += fresh.length; stats.updated += patches.length;

@@ -4,7 +4,7 @@
     if (typeof raw !== 'string') return null;
     let s = raw.trim();
     if (!/^https?:\/\//i.test(s)) {
-      if (/^(www\.|m\.|vt\.|vm\.)?(tiktok\.com|instagram\.com|youtube\.com|youtu\.be)\//i.test(s)) s = 'https://' + s;
+      if (/^(www\.|m\.|vt\.|vm\.)?(tiktok\.com|tt\.site|instagram\.com|youtube\.com|youtu\.be)\//i.test(s)) s = 'https://' + s;
       else return null;
     }
     let u;
@@ -22,6 +22,11 @@
         return { platform: 'tiktok', key: 'short:' + m[1], url: `https://${host}/${m[1]}/` };
       if ((m = path.match(/^\/t\/([A-Za-z0-9]+)/)))
         return { platform: 'tiktok', key: 'short:' + m[1], url: `https://www.tiktok.com/t/${m[1]}/` };
+      return null;
+    }
+    // Link pendek TikTok bentuk baru: https://www.tt.site/t/ZSgRQLaUC/ (mengarah ke video TikTok).
+    if (host === 'tt.site' || host.endsWith('.tt.site')) {
+      if ((m = path.match(/^\/t\/([A-Za-z0-9]+)/))) return { platform: 'tiktok', key: 'short:' + m[1], url: `https://www.tt.site/t/${m[1]}/` };
       return null;
     }
     if (host === 'instagram.com' || host.endsWith('.instagram.com')) {
@@ -43,7 +48,7 @@
   }
   function yt(id) { return { platform: 'youtube', key: id, url: `https://www.youtube.com/shorts/${id}` }; }
   function extractUrls(text) {
-    return (String(text).match(/(?:https?:\/\/)?[\w.-]*(?:tiktok\.com|instagram\.com|youtube\.com|youtu\.be)\/[^\s"'<>,]+/gi) || []);
+    return (String(text).match(/(?:https?:\/\/)?[\w.-]*(?:tiktok\.com|tt\.site|instagram\.com|youtube\.com|youtu\.be)\/[^\s"'<>,]+/gi) || []);
   }
   g.XUrls = { parseUrl, extractUrls };
 })(typeof globalThis !== 'undefined' ? globalThis : window);

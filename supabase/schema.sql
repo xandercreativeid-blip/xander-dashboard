@@ -146,3 +146,6 @@ alter table brands add column if not exists sheet_state jsonb not null default '
 -- sheet_refs_and_removal).
 alter table contents add column if not exists sheet_refs jsonb not null default '{}'::jsonb;
 alter table contents add column if not exists removed_at timestamptz;
+
+-- Migrasi sheet_posting_date_wins: merge_metrics memakai sheet->>'posted_at' (Tanggal Upload di macrosheets)
+-- sebagai tanggal resmi konten bila ada; tanggal dari TikTok/YouTube hanya cadangan untuk baris tanpa tanggal.
