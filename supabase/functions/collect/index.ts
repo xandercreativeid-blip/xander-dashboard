@@ -173,11 +173,11 @@ async function pool(rows: any[], concurrency: number, delayMs: number, worker: (
 
 async function due(platform: string, limit: number) {
   if (limit <= 0) return [];
-  const { data: req } = await sb.from("contents").select("*").eq("platform", platform).not("refresh_requested_at", "is", null)
+  const { data: req } = await sb.from("contents").select("*").eq("platform", platform).is("removed_at", null).not("refresh_requested_at", "is", null)
     .order("refresh_requested_at").limit(limit);
   const rest = limit - (req?.length || 0);
   if (rest <= 0) return req || [];
-  const { data: more } = await sb.from("contents").select("*").eq("platform", platform).is("refresh_requested_at", null)
+  const { data: more } = await sb.from("contents").select("*").eq("platform", platform).is("removed_at", null).is("refresh_requested_at", null)
     .lte("next_fetch_at", new Date().toISOString()).order("next_fetch_at").limit(rest);
   return [...(req || []), ...(more || [])];
 }

@@ -73,6 +73,14 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .tile .val { font-size: 24px; font-weight: 650; letter-spacing: -.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .tile .note { color: var(--text-3); font-size: 12px; min-height: 17px; }
 .tile.hero { border-color: var(--text); }
+.src { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; }
+.src-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.src-head a { color: var(--accent); font-size: 12px; }
+.src-stats { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-2); }
+.src-stats b { color: var(--text); }
+.src-brands { display: flex; flex-wrap: wrap; gap: 6px; max-height: 120px; overflow: auto; }
+.src-brands .chip { font-size: 12px; padding: 3px 9px; }
+dialog:has(.src) { width: min(760px, calc(100vw - 32px)); }
 .kpi .body { padding-top: 10px; }
 .kpi-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 18px 28px; }
 .kpi-grid dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; }
@@ -258,8 +266,10 @@ const DB = {
       const d = window.DEMO_DATA || { brands: [], contents: [], settings: {} };
       return { brands: d.brands, contents: d.contents, settings: d.settings || {} };
     }
-    const [brands, contents, rows] = await Promise.all([this.all('brands'), this.all('contents'), this.sb.from('settings').select('*').then((r) => this.ok(r))]);
-    return { brands, contents, settings: Object.fromEntries(rows.map((r) => [r.key, r.value])) };
+    const [brands, all, rows] = await Promise.all([this.all('brands'), this.all('contents'), this.sb.from('settings').select('*').then((r) => this.ok(r))]);
+    // Link yang sudah dihapus dari macrosheets tidak ditampilkan.
+    const contents = all.filter((c) => !c.removed_at);
+    return { brands, contents, removedCount: all.length - contents.length, settings: Object.fromEntries(rows.map((r) => [r.key, r.value])) };
   },
   async addBrand(row) {
     if (!LIVE) { const b = { id: crypto.randomUUID(), ...row }; S.brands.push(b); return b; }
@@ -486,6 +496,7 @@ function render() {
       </nav>
       <div class="sidefoot">
         <button class="btn" id="addBrand">+ New Brand</button>
+        <button class="btn" id="openSources">Connected Macrosheets (${sheetUrls(S.settings.sheet).length})</button>
         <button class="btn" id="openSettings">Data Sources &amp; Settings</button>
         ${LIVE ? '<button class="btn ghost" id="logout">Sign Out</button>' : ''}
       </div>
@@ -585,7 +596,7 @@ function kpiCard(b) {
   if (k.quantity_per_month) rows.push([`Posted this month (${MONTH_NAMES[+today.slice(5, 7) - 1]})`, `${nf.format(st.monthMax)} / ${nf.format(k.quantity_per_month)}`, progress(st.monthMax, k.quantity_per_month), perPlat(st.thisMonth)]);
   for (const x of st.fyp) rows.push([`KPI FYP · ${PLAT[x.p]} ≥ ${cf.format(x.fyp)} views`, `${nf.format(x.hits)} / ${nf.format(x.target)}`, progress(x.hits, x.target),
     x.hits >= x.target ? '<span class="badge good">Achieved</span>' : `${nf.format(x.target - x.hits)} more needed${cr ? '' : ' · counting all time'}`]);
-  return `<section class="card kpi"><header><h2>Contract &amp; KPI</h2><span class="sub">From the macrosheets tab “${esc(k.tab || b.name)}”</span></header>
+  return `<section class="card kpi"><header><h2>Contract &amp; KPI</h2><span class="sub">From tab “${esc(k.tab || b.name)}” in ${esc(sheetTitle(Object.keys(b.kpi || {}).find((sid) => b.kpi[sid] === k) || ''))}</span></header>
     <div class="body kpi-grid">
       <dl>${info.map(([l, v]) => `<div><dt>${l}</dt><dd>${v}</dd></div>`).join('')}</dl>
       <div class="kpi-progress">${rows.length ? rows.map(([l, v, bar, note]) => `<div class="krow"><div class="kl"><span>${l}</span><b class="num">${v}</b></div>${bar}<div class="sub">${note}</div></div>`).join('') : '<div class="sub">No numeric KPI (Quantity, Total Video or KPI FYP) in the macrosheets yet.</div>'}</div>
@@ -789,6 +800,7 @@ function bind(list) {
   });
   on('#addLinks', 'click', linksDialog);
   on('#openSettings', 'click', settingsDialog);
+  on('#openSources', 'click', sourcesDialog);
   on('#logout', 'click', async () => { await DB.sb.auth.signOut(); location.reload(); });
   on('#refreshAll', 'click', async () => {
     const ids = list.filter((c) => c.status !== 'unavailable').map((c) => c.id);
@@ -831,63 +843,25 @@ function loadScript(src) {
 }
 const sheetUrls = (cfg) => (cfg?.urls || (cfg?.url ? [cfg.url] : [])).filter(Boolean);
 const sheetIdOf = (u) => (String(u).match(/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/) || [])[1];
+// "Sync Now": jalankan sinkron server berulang sampai setiap macrosheets selesai dibaca sekali.
 async function syncSheet(silent = false) {
-  const cfg = S.settings.sheet;
-  if (!LIVE || !sheetUrls(cfg).length) return null;
-  if (!window.XLSX) await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
-  const stats = { at: new Date().toISOString(), brands: 0, added: 0, updated: 0 };
-  for (const url of sheetUrls(cfg)) {
-  const sid = sheetIdOf(url);
-  const tabs = XSheet.parseWorkbook(window.XLSX, await DB.downloadSheet(url), cfg.exclude_tabs || []);
-  for (const tab of tabs) {
-    const norm = (t) => String(t || '').trim().toLowerCase();
-    let brand = S.brands.find((b) => norm(b.sheet_tab || b.name) === norm(tab.tab));
-    if (!brand) { brand = await DB.addBrand({ name: tab.tab.trim(), sheet_tab: tab.tab, sheet_hidden: !!tab.hidden, sheet_state: { [sid]: !!tab.hidden }, kpi: tab.kpi ? { [sid]: { ...tab.kpi, tab: tab.tab, hidden: !!tab.hidden } } : {} }); stats.brands++; }
-    else {
-      // Diarsipkan hanya bila tab-nya tersembunyi di semua macrosheets tempat brand ini muncul.
-      const state = { ...(brand.sheet_state || {}), [sid]: !!tab.hidden };
-      const kpi = { ...(brand.kpi || {}) };
-      if (tab.kpi) kpi[sid] = { ...tab.kpi, tab: tab.tab, hidden: !!tab.hidden }; else delete kpi[sid];
-      const patch = { sheet_state: state, sheet_hidden: Object.values(state).every(Boolean), kpi };
-      if (JSON.stringify(patch) !== JSON.stringify({ sheet_state: brand.sheet_state || {}, sheet_hidden: !!brand.sheet_hidden, kpi: brand.kpi || {} })) await DB.updateBrand(brand.id, patch);
-    }
-    const byKey = new Map();
-    for (const c of S.contents) if (c.brand_id === brand.id) { byKey.set(c.platform + ':' + c.external_id, c); for (const a of c.aliases || []) byKey.set(c.platform + ':' + a, c); }
-    const fresh = [], patches = [];
-    for (const l of tab.links) {
-      const cur = byKey.get(l.platform + ':' + l.key);
-      const hasData = METRICS.some((k) => l.sheet[k] !== null);
-      if (!cur) {
-        const row = { brand_id: brand.id, platform: l.platform, external_id: l.key, url: l.url, posted_at: l.sheet.posted_at };
-        if (hasData) Object.assign(row, { sheet: Object.fromEntries(METRICS.map((k) => [k, l.sheet[k]])), source: 'sheet' });
-        else row.source = 'none';
-        fresh.push(row);
-      } else if (hasData && cur.source !== 'manual') {
-        // Angka Sheet disimpan di kolom 'sheet'; database memilih angka tertinggi antara Sheet dan data langsung.
-        const snap = Object.fromEntries(METRICS.map((k) => [k, l.sheet[k]]));
-        const patch = {};
-        if (JSON.stringify(snap) !== JSON.stringify(Object.fromEntries(METRICS.map((k) => [k, cur.sheet?.[k] ?? null])))) patch.sheet = snap;
-        if (cur.source === 'none') patch.source = 'sheet';
-        if ((cur.source === 'sheet' || cur.source === 'none' || !cur.posted_at) && l.sheet.posted_at && (!cur.posted_at || Date.parse(cur.posted_at) !== Date.parse(l.sheet.posted_at))) patch.posted_at = l.sheet.posted_at;
-        if (Object.keys(patch).length) patches.push([cur.id, patch]);
-      }
-    }
-    for (let i = 0; i < fresh.length; i += 500) await DB.addContents(fresh.slice(i, i + 500));
-    for (let i = 0; i < patches.length; i += 10) await Promise.all(patches.slice(i, i + 10).map(([id, p]) => DB.updateContent(id, p)));
-    stats.added += fresh.length; stats.updated += patches.length;
-    if (!silent) toast(`Syncing Sheet… ${tab.tab}`);
+  if (!LIVE || !sheetUrls(S.settings.sheet).length) return null;
+  const { data } = await DB.sb.auth.getSession();
+  const total = { added: 0, updated: 0, removed: 0, brands: 0, renamed: [] }, done = new Set();
+  for (let i = 0; i < 60; i++) {
+    const res = await fetch(`${CFG.supabaseUrl}/functions/v1/sync-sheet`, { method: 'POST', body: '{}',
+      headers: { 'Content-Type': 'application/json', apikey: CFG.supabaseAnonKey, Authorization: `Bearer ${data.session?.access_token}` } });
+    const st = await res.json().catch(() => ({}));
+    if (!res.ok || st.error) throw new Error(st.error || `HTTP ${res.status}`);
+    if (st.skipped) break;
+    for (const k of ['added', 'updated', 'removed', 'brands']) total[k] += st[k] || 0;
+    total.renamed.push(...(st.renamed || []));
+    if (!silent) toast(`Syncing macrosheets ${st.sheet} of ${st.sheets}… ${st.tabs.join(', ')}`);
+    if (st.done) done.add(st.sheet);
+    if (done.size >= st.sheets) break;
   }
-  }
-  stats.last_added_at = stats.added ? stats.at : S.settings.sheet_last_sync?.last_added_at || null;
-  await DB.setSetting('sheet_last_sync', stats);
-  if (stats.added) DB.kick();
-  return stats;
-}
-async function autoSync() {
-  const last = S.settings.sheet_last_sync?.at;
-  if (!LIVE || !sheetUrls(S.settings.sheet).length || (last && Date.now() - Date.parse(last) < 6 * 3600000)) return;
-  try { const s = await syncSheet(true); if (s && (s.added || s.brands)) { toast(`Sheet synced: ${s.added} new links.`); render(); } }
-  catch (e) { console.warn('Sheet sync failed', e); }
+  if (total.added) DB.kick();
+  return total;
 }
 
 // ---------------------------------------------------------------- export (Excel, PDF, Word, PowerPoint, Markdown, CSV)
@@ -1330,9 +1304,9 @@ function brandDialog(b) {
     <label>Default views target per content (used when the macrosheets has no FYP Quantity)<input name="target" type="number" min="1" step="1" required value="${b?.views_target ?? 10000}"></label>
     <label>Google Sheets tab name (optional, if different from the brand name)<input name="tab" value="${esc(b?.sheet_tab)}"></label>
     ${b ? `<label>Status<select name="arch">
-      <option value="sheet" ${b.archived_override == null ? 'selected' : ''}>Follow Google Sheets (tab is ${b.sheet_hidden ? 'hidden → Archived' : 'visible → Active'})</option>
-      <option value="active" ${b.archived_override === false ? 'selected' : ''}>Always Active</option>
-      <option value="archived" ${b.archived_override === true ? 'selected' : ''}>Always Archived</option>
+      <option value="sheet" ${b.archived_override == null ? 'selected' : ''}>Follow macrosheets (tab is ${b.sheet_hidden ? 'hidden → Archived' : 'visible → Active'})</option>
+      <option value="active" ${b.archived_override === false ? 'selected' : ''}>Active (until the tab is hidden/unhidden in macrosheets)</option>
+      <option value="archived" ${b.archived_override === true ? 'selected' : ''}>Archived (until the tab is hidden/unhidden in macrosheets)</option>
     </select></label>` : ''}
     ${FOOT(b ? '<button class="btn danger" value="delete" formnovalidate>Delete Brand</button>' : '')}`,
   async (fd, action) => {
@@ -1383,7 +1357,7 @@ function parseLinks(text, brandId) {
 function contentDialog(c) {
   const f = (k, l) => `<label>${l}<input name="${k}" type="number" min="0" step="1" value="${c[k] ?? ''}"></label>`;
   dialog(`<h3>Edit Content Data</h3>
-    <div class="hint"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.url)}</a><br>Numbers entered here are used as-is and are no longer updated from the platform or the Sheet. Use this for numbers from Insights.</div>
+    <div class="hint"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.url)}</a><br>Numbers entered here are used until the numbers for this link change in the macrosheets — the macrosheets is the main source.</div>
     <label>Posting date<input name="posted" type="date" value="${dayKey(c.posted_at) || ''}"></label>
     <div class="row">${f('views', 'Views')}${f('likes', 'Likes')}${f('comments', 'Comments')}${f('shares', 'Shares')}${f('saves', 'Saves')}</div>
     ${FOOT('<button class="btn danger" value="delete" formnovalidate>Delete Content</button>')}`,
@@ -1398,6 +1372,32 @@ function contentDialog(c) {
   });
 }
 
+// ---------------------------------------------------------------- Connected Macrosheets
+const sheetTitle = (sid) => S.settings.sheet_status?.[sid]?.title || `Macrosheets ${sid.slice(0, 6)}…`;
+function sourcesDialog() {
+  const urls = sheetUrls(S.settings.sheet), status = S.settings.sheet_status || {}, last = S.settings.sheet_last_sync;
+  const brandsOf = (sid) => S.brands.filter((b) => b.sheet_state && sid in b.sheet_state).sort((a, z) => a.name.localeCompare(z.name, 'en'));
+  const linksOf = (sid) => S.contents.filter((c) => c.sheet_refs && sid in c.sheet_refs).length;
+  const cards = urls.map((u, i) => {
+    const sid = sheetIdOf(u), st = status[sid] || {}, bs = brandsOf(sid), active = bs.filter((b) => !isArchived(b));
+    const state = st.error ? `<span class="badge bad" title="${esc(st.error)}">Error ${ago(st.error_at)}</span>` : st.at ? `<span class="badge good">Connected</span>` : '<span class="badge warn">Waiting for first read</span>';
+    return `<section class="src">
+      <div class="src-head"><div><b>${esc(sheetTitle(sid))}</b> ${state}<div class="sub"><a href="${esc(u)}" target="_blank" rel="noopener">Open in Google Sheets ↗</a></div></div>
+        <div class="src-stats"><span><b>${nf.format(bs.length)}</b> brands</span><span><b>${nf.format(active.length)}</b> active</span><span><b>${nf.format(linksOf(sid))}</b> links</span><span><b>${st.tabs ?? '–'}</b> tabs${st.hidden_tabs ? ` (${st.hidden_tabs} hidden)` : ''}</span></div></div>
+      <div class="sub">Last read ${st.at ? ago(st.at) : '–'}${st.full_at ? ` · all tabs read ${ago(st.full_at)}` : ''}${st.error ? `<br><span style="color:var(--bad)">${esc(st.error)}</span>` : ''}</div>
+      <div class="src-brands">${bs.map((b) => `<button class="chip" data-src-brand="${b.id}" ${isArchived(b) ? 'style="opacity:.6" title="Archived"' : ''}>${esc(b.name)}</button>`).join('') || '<span class="sub">No brands read yet.</span>'}</div>
+    </section>`;
+  }).join('');
+  const d = dialog(`<h3>Connected Macrosheets</h3>
+    <div class="hint">The macrosheets are the main source. Links, numbers, posting dates, the KPI block and hidden tabs are read automatically, one macrosheets after another
+      (about 30 minutes for a full round). Links removed from a macrosheets disappear from the dashboard; a renamed tab keeps its brand.
+      ${last?.at ? `<br>Latest read ${ago(last.at)}: macrosheets ${last.sheet ?? 1} of ${last.sheets ?? urls.length}, tabs ${esc((last.tabs || []).join(', '))}.` : ''}
+      ${S.removedCount ? `<br>${nf.format(S.removedCount)} links are hidden because they were removed from the macrosheets.` : ''}</div>
+    ${cards || '<div class="sub">No macrosheets connected yet. Add one under Data Sources &amp; Settings.</div>'}
+    <div class="foot"><span><button class="btn" value="settings" formnovalidate>Add or remove macrosheets…</button></span><span><button class="btn primary" value="cancel" formnovalidate>Close</button></span></div>`,
+  async (fd, action) => { if (action === 'settings') { setTimeout(settingsDialog, 0); return; } });
+  d.querySelectorAll('[data-src-brand]').forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); d.close(); S.brandId = b.dataset.srcBrand; S.page = 0; render(); }));
+}
 async function settingsDialog() {
   const sh = S.settings.sheet || {}, ls = S.settings.sheet_last_sync, cs = S.settings.collector_status;
   const priv = LIVE ? await DB.privateStatus() : {};
@@ -1426,7 +1426,7 @@ async function settingsDialog() {
       toast('Downloading and reading the Sheet…');
       const st = await syncSheet();
       Object.assign(S, await DB.load());
-      toast(`Sync complete: ${st.added} new links, ${st.brands} new brands, ${st.updated} updated. Latest numbers fill in gradually.`);
+      toast(`Sync complete: ${st.added} new links, ${st.brands} new brands, ${st.updated} updated, ${st.removed} removed${st.renamed.length ? `, renamed: ${st.renamed.join(', ')}` : ''}.`);
     } else toast('Settings saved.');
   });
 }
@@ -1464,7 +1464,7 @@ async function start() {
       $('#out').onclick = async () => { await DB.sb.auth.signOut(); location.reload(); };
       return;
     }
-    Object.assign(S, await DB.load()); render(); tvFromUrl(); autoSync();
+    Object.assign(S, await DB.load()); render(); tvFromUrl();
   }
   catch (e) { $('#root').innerHTML = `<div class="empty">Could not load data: ${esc(e.message)}</div>`; }
 }

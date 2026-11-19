@@ -140,3 +140,9 @@ alter table brands add column if not exists archived boolean generated always as
 -- Blok KPI dan status tab per macrosheets ({ "<sheet id>": ... }).
 alter table brands add column if not exists kpi jsonb not null default '{}'::jsonb;
 alter table brands add column if not exists sheet_state jsonb not null default '{}'::jsonb;
+
+-- Macrosheets sumber utama: link tercatat di macrosheets mana (sheet_refs); link yang dihapus dari semua
+-- macrosheets diberi removed_at dan disembunyikan. Fungsi sync_sheet_refs dipakai sinkron Sheet (lihat migrasi
+-- sheet_refs_and_removal).
+alter table contents add column if not exists sheet_refs jsonb not null default '{}'::jsonb;
+alter table contents add column if not exists removed_at timestamptz;

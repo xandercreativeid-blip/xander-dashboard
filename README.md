@@ -46,6 +46,17 @@ per brand, sepanjang waktu, per bulan posting, atau rentang tanggal bebas.
   mencapai FYP Quantity. Periode tanpa tahun (mis. "OCT-MAR") memakai tahun terdekat dan ditandai "year assumed".
 - Pilihan periode **Contract Period** muncul untuk brand yang periode kontraknya terbaca.
 
+## Macrosheets sebagai sumber utama
+
+- **Connected Macrosheets** (sidebar) menampilkan macrosheets yang tersambung: nama file, status, kapan terakhir
+  dibaca, jumlah tab, brand, dan link, serta daftar brand dari tiap macrosheets.
+- Link yang dihapus dari macrosheets ikut hilang dari dashboard (kecuali masih ada di macrosheets lain). Pengaman:
+  bila lebih dari separuh link satu tab hilang sekaligus, penghapusan ditunda.
+- Tab yang diganti nama tetap brand yang sama (dikenali dari link-linknya).
+- Isian manual (tombol ✎) dipakai sampai angka link itu berubah di macrosheets.
+- Arsip manual berlaku sampai tab di-hide/unhide lagi di macrosheets.
+- Link yang ditambahkan lewat dashboard (+ Add Links) tidak terhapus otomatis.
+
 ## Perbandingan periode
 
 Untuk setiap periode (kecuali All Time dan Contract Period), angka dibandingkan dengan periode sebelumnya yang
