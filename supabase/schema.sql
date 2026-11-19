@@ -1,5 +1,5 @@
 -- Xander Creative — Content Performance Dashboard
--- Struktur database Supabase (sudah diterapkan ke project lewat migrasi; file ini sebagai arsip).
+-- Arsip riwayat struktur database. Untuk memasang di project baru pakai install/install.sql (versi lengkap terbaru).
 
 create extension if not exists pgcrypto;
 create extension if not exists pg_net;
