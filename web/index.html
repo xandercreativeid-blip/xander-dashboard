@@ -374,7 +374,7 @@ const countedBrands = () => S.brands.filter((b) => (S.includeArchived || !isArch
 function brandKpi(b) {
   const all = Object.values((b && b.kpi) || {});
   if (!all.length) return null;
-  const score = (k) => (Object.keys(k.platforms || {}).length ? 2 : 0) + (k.hidden ? 0 : 1) + (k.periods?.length ? 0.5 : 0);
+  const score = (k) => (Object.keys(k.platforms || {}).length || k.views_kpi ? 2 : 0) + (k.hidden ? 0 : 1) + (k.periods?.length ? 0.5 : 0);
   return all.sort((a, z) => score(z) - score(a))[0];
 }
 // Target views per konten: FYP Quantity platformnya di macrosheets, atau target default brand.
@@ -577,7 +577,21 @@ function kpiStats(b) {
   const fyp = Object.entries(k.platforms || {}).filter(([, v]) => v.kpi).map(([p, v]) => ({
     p, target: v.kpi, fyp: v.fyp ?? b.views_target ?? 10000,
     hits: inContract.filter((c) => c.platform === p && (c.views || 0) >= (v.fyp ?? b.views_target ?? 10000)).length }));
-  return { k, posted, thisMonth, fyp, postedMax: Math.max(0, ...Object.values(posted)), monthMax: Math.max(0, ...Object.values(thisMonth)) };
+  // KPI Views: total views semua konten yang diposting dalam timeline kontrak (per platform bila macrosheets merinci).
+  const vk = k.views_kpi;
+  const sumViews = (ps) => inContract.filter((c) => !ps || ps.includes(c.platform)).reduce((a, c) => a + (c.views || 0), 0);
+  const views = !vk ? [] : vk.by_platform
+    ? Object.entries(vk.by_platform).map(([p, t]) => ({ label: PLAT[p], target: t, value: sumViews([p]) }))
+    : [{ label: vk.platforms?.length ? vk.platforms.map((p) => PLAT[p]).join(' + ') : 'All platforms', target: vk.target, value: sumViews(vk.platforms) }];
+  return { k, posted, thisMonth, fyp, views, postedMax: Math.max(0, ...Object.values(posted)), monthMax: Math.max(0, ...Object.values(thisMonth)) };
+}
+// Ringkasan KPI kontrak untuk tabel/TV: FYP "h / t" atau Views "1.2M / 2M".
+function kpiSummary(st) {
+  if (!st) return null;
+  const parts = [];
+  if (st.fyp.length) { const h = st.fyp.reduce((a, x) => a + x.hits, 0), t = st.fyp.reduce((a, x) => a + x.target, 0); parts.push({ text: `FYP ${h}/${t}`, ok: h >= t, title: st.fyp.map((x) => `${PLAT[x.p]}: ${x.hits}/${x.target} contents ≥ ${nf.format(x.fyp)} views`).join(', ') }); }
+  for (const v of st.views) parts.push({ text: `Views ${cf.format(v.value)}/${cf.format(v.target)}`, ok: v.value >= v.target, title: `${v.label}: ${nf.format(v.value)} of ${nf.format(v.target)} views in the contract timeline` });
+  return parts.length ? parts : null;
 }
 const progress = (v, max) => `<div class="kbar"><i style="width:${max ? Math.min(100, (v / max) * 100) : 0}%"${v >= max ? ' class="done"' : ''}></i></div>`;
 function kpiCard(b) {
@@ -592,7 +606,7 @@ function kpiCard(b) {
   const info = [['Contract', esc(f.contract || '–')], ['Contract period', period + (cr ? `<div class="sub">${left > 0 ? `${left} days left` : left === 0 ? 'Ends today' : `Ended ${-left} days ago`}</div>` : '')],
     ['Quantity', esc(f.quantity || '–')], ['Total video', esc(f.total_video || '–')], ['PM', esc(f.pm || '–')], ['Scriptwriter', esc(f.scriptwriter || '–')],
     ['Master drive', k.master_drive_url ? `<a href="${esc(k.master_drive_url)}" target="_blank" rel="noopener">${esc(f.master_drive || 'Open')}</a>` : esc(f.master_drive || '–')],
-    ...(f.kpi_text ? [['KPI', esc(f.kpi_text) + (f.platform_text ? ` · ${esc(f.platform_text)}` : '')]] : []),
+    ...(f.kpi_text || f.views_target ? [['KPI', esc([f.kpi_text, f.views_target].filter(Boolean).join(' · ')) + (f.platform_text ? ` · ${esc(f.platform_text)}` : '')]] : []),
     ...(f.notes ? [['Notes', esc(f.notes)]] : [])];
   const platsUsed = Object.keys(PLAT).filter((p) => st.posted[p] || st.thisMonth[p]);
   const perPlat = (o) => platsUsed.map((p) => `${PLAT[p]} ${o[p]}`).join(' · ');
@@ -601,10 +615,12 @@ function kpiCard(b) {
   if (k.quantity_per_month) rows.push([`Posted this month (${MONTH_NAMES[+today.slice(5, 7) - 1]})`, `${nf.format(st.monthMax)} / ${nf.format(k.quantity_per_month)}`, progress(st.monthMax, k.quantity_per_month), perPlat(st.thisMonth)]);
   for (const x of st.fyp) rows.push([`KPI FYP · ${PLAT[x.p]} ≥ ${cf.format(x.fyp)} views`, `${nf.format(x.hits)} / ${nf.format(x.target)}`, progress(x.hits, x.target),
     x.hits >= x.target ? '<span class="badge good">Achieved</span>' : `${nf.format(x.target - x.hits)} more needed${cr ? '' : ' · counting all time'}`]);
+  for (const v of st.views) rows.push([`KPI Views · ${esc(v.label)} (total in contract)`, `${cf.format(v.value)} / ${cf.format(v.target)}`, progress(v.value, v.target),
+    v.value >= v.target ? '<span class="badge good">Achieved</span>' : `${cf.format(v.target - v.value)} more views needed${cr ? '' : ' · contract period not set, counting all time'}`]);
   return `<section class="card kpi"><header><h2>Contract &amp; KPI</h2><span class="sub">From tab “${esc(k.tab || b.name)}” in ${esc(sheetTitle(Object.keys(b.kpi || {}).find((sid) => b.kpi[sid] === k) || ''))}</span></header>
     <div class="body kpi-grid">
       <dl>${info.map(([l, v]) => `<div><dt>${l}</dt><dd>${v}</dd></div>`).join('')}</dl>
-      <div class="kpi-progress">${rows.length ? rows.map(([l, v, bar, note]) => `<div class="krow"><div class="kl"><span>${l}</span><b class="num">${v}</b></div>${bar}<div class="sub">${note}</div></div>`).join('') : '<div class="sub">No numeric KPI (Quantity, Total Video or KPI FYP) in the macrosheets yet.</div>'}</div>
+      <div class="kpi-progress">${rows.length ? rows.map(([l, v, bar, note]) => `<div class="krow"><div class="kl"><span>${l}</span><b class="num">${v}</b></div>${bar}<div class="sub">${note}</div></div>`).join('') : '<div class="sub">No numeric KPI (Quantity, Total Video, KPI FYP or KPI Views) in the macrosheets yet.</div>'}</div>
     </div></section>`;
 }
 function tile(label, value, note = '', hero = false, prev) {
@@ -716,11 +732,10 @@ function renderMonthly(list) {
 function renderBrandTable(list) {
   const prevList = CMP ? filtered(CMP.prev) : [];
   const rows = countedBrands().map((b) => ({ b, s: summarize(list.filter((c) => c.brand_id === b.id)), p: CMP ? summarize(prevList.filter((c) => c.brand_id === b.id)) : null })).sort((a, z) => z.s.views - a.s.views);
-  const anyKpi = rows.some(({ b }) => kpiStats(b)?.fyp.length);
-  const kpiCell = (b) => { const st = kpiStats(b); if (!st || !st.fyp.length) return '<td class="num" style="color:var(--text-3)">–</td>';
-    const h = st.fyp.reduce((a, x) => a + x.hits, 0), t = st.fyp.reduce((a, x) => a + x.target, 0);
-    return `<td class="num" title="${st.fyp.map((x) => `${PLAT[x.p]}: ${x.hits}/${x.target} contents ≥ ${nf.format(x.fyp)} views`).join(', ')}">${h >= t ? '<span class="badge good">' : ''}${h} / ${t}${h >= t ? '</span>' : ''}</td>`; };
-  $('#brandTable').innerHTML = `<table><thead><tr><th>Brand</th>${SUM_HEAD}${CMP ? `<th title="Compared with ${esc(CMP.label)}">Views vs Previous</th>` : ''}${anyKpi ? '<th title="Contents reaching the FYP Quantity during the contract, versus KPI FYP">Contract KPI FYP</th>' : ''}</tr></thead><tbody>
+  const anyKpi = rows.some(({ b }) => kpiSummary(kpiStats(b)));
+  const kpiCell = (b) => { const parts = kpiSummary(kpiStats(b)); if (!parts) return '<td class="num" style="color:var(--text-3)">–</td>';
+    return `<td class="num" title="${esc(parts.map((x) => x.title).join(' · '))}">${parts.map((x) => x.ok ? `<span class="badge good">${x.text}</span>` : x.text).join('<br>')}</td>`; };
+  $('#brandTable').innerHTML = `<table><thead><tr><th>Brand</th>${SUM_HEAD}${CMP ? `<th title="Compared with ${esc(CMP.label)}">Views vs Previous</th>` : ''}${anyKpi ? '<th title="KPI FYP: contents reaching the FYP views during the contract. KPI Views: total views of contents posted in the contract timeline.">Contract KPI</th>' : ''}</tr></thead><tbody>
     ${rows.map(({ b, s, p }) => `<tr class="clickable" data-brand="${b.id}"><td>${esc(b.name)}${isArchived(b) ? ' <span class="badge mute">Archived</span>' : ''}</td>${sumCells(s)}${CMP ? `<td class="num">${shortDelta(s.views, p.views)}</td>` : ''}${anyKpi ? kpiCell(b) : ''}</tr>`).join('')}</tbody></table>`;
 }
 
@@ -955,6 +970,7 @@ function kpiMeta(b) {
   if (st.k.total_videos) out.push(['Videos posted in contract', `${st.postedMax} of ${st.k.total_videos}`]);
   if (st.k.quantity_per_month) out.push(['Posted this month', `${st.monthMax} of ${st.k.quantity_per_month}`]);
   for (const x of st.fyp) out.push([`KPI FYP ${PLAT[x.p]} (>= ${nf.format(x.fyp)} views)`, `${x.hits} of ${x.target}${x.hits >= x.target ? ' - achieved' : ''}`]);
+  for (const v of st.views) out.push([`KPI Views ${v.label} (total in contract)`, `${nf.format(v.value)} of ${nf.format(v.target)}${v.value >= v.target ? ' - achieved' : ''}`]);
   return out;
 }
 // ---- Excel
@@ -1217,10 +1233,11 @@ function tvKpiCard(b) {
   if (k.total_videos) rows.push(['Videos posted in contract', st.postedMax, k.total_videos]);
   if (k.quantity_per_month) rows.push([`Posted in ${MONTH_NAMES[+today.slice(5, 7) - 1]}`, st.monthMax, k.quantity_per_month]);
   for (const x of st.fyp) rows.push([`KPI FYP · ${PLAT[x.p]} ≥ ${cf.format(x.fyp)}`, x.hits, x.target]);
+  for (const v of st.views) rows.push([`KPI Views · ${esc(v.label)} (contract total)`, v.value, v.target, true]);
   const when = cr ? `${dateLabel(cr[0])} – ${dateLabel(cr[1])} · ${left > 0 ? `${left} days left` : left === 0 ? 'ends today' : 'ended'}` : esc(f.period || '');
   return `<section class="card tv-kpi"><header><h2>Contract &amp; KPI</h2><span class="sub">${esc(f.contract || '')}</span></header>
     <div class="tv-kpi-when">${when}</div>
-    ${rows.map(([l, v, t]) => `<div class="tv-krow"><div class="kl"><span>${l}</span><b>${nf.format(v)} / ${nf.format(t)}${v >= t ? ' ✓' : ''}</b></div>${progress(v, t)}</div>`).join('') || '<div class="tv-kpi-when">No numeric KPI in the macrosheets yet.</div>'}
+    ${rows.map(([l, v, t, big]) => `<div class="tv-krow"><div class="kl"><span>${l}</span><b>${(big ? cf : nf).format(v)} / ${(big ? cf : nf).format(t)}${v >= t ? ' ✓' : ''}</b></div>${progress(v, t)}</div>`).join('') || '<div class="tv-kpi-when">No numeric KPI in the macrosheets yet.</div>'}
   </section>`;
 }
 function renderTv() {
@@ -1240,9 +1257,8 @@ function renderTv() {
   let side;
   if (!brand) {
     const rows = countedBrands().map((b) => ({ b, s: summarize(list.filter((c) => c.brand_id === b.id)) })).filter((r) => r.s.n).sort((a, z) => z.s.views - a.s.views).slice(0, 8);
-    const kpiTag = (b) => { const st = kpiStats(b); if (!st || !st.fyp.length) return '';
-      const h = st.fyp.reduce((a, x) => a + x.hits, 0), t = st.fyp.reduce((a, x) => a + x.target, 0);
-      return ` · <span class="${h >= t ? 'kok' : ''}">KPI FYP ${h}/${t}${h >= t ? ' ✓' : ''}</span>`; };
+    const kpiTag = (b) => { const parts = kpiSummary(kpiStats(b)); if (!parts) return '';
+      return parts.map((x) => ` · <span class="${x.ok ? 'kok' : ''}">KPI ${x.text}${x.ok ? ' ✓' : ''}</span>`).join(''); };
     side = `<section class="card"><header><h2>Top Brands by Views</h2></header><ol class="tv-list">${rows.map((r, i) => `<li><span class="rank">${i + 1}</span><span class="name">${esc(r.b.name)}<small>${nf.format(r.s.n)} contents · ER ${pct(r.s.er)}${kpiTag(r.b)}</small></span><span class="v">${big(r.s.views)}<small>${r.s.hit} hit target</small></span></li>`).join('')}</ol></section>`;
   } else {
     const kc = tvKpiCard(brand);

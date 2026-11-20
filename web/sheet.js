@@ -84,10 +84,14 @@
   // Contoh (tab Haircode): Nama Brand / Scriptwriter / PM / Month Start-End / Notes, Contract / Quantity /
   // Total Video / Master Drive, dan tabel kecil Platform | FYP Quantity | KPI FYP.
   const KPI_LABELS = [
-    ['brand_name', /^nama brand/], ['scriptwriter', /^script ?writer/], ['pm', /^(pm|project manager)$/],
-    ['period', /^month st(a|ra)rt/], ['notes', /^notes?\b/], ['contract', /^contract/], ['quantity', /^quantity/],
-    ['total_video', /^(total video|goal)/], ['master_drive', /^master drive/],
-    ['kpi_text', /^kpi( fyp)?$/], ['platform_text', /^platforms?$/],
+    ['brand_name', /^(nama brand|brand name|nama klien|client)$/], ['scriptwriter', /^script ?writer/], ['pm', /^(pm|project manager|pic)$/],
+    ['period', /^(month )?st(a|ra)rt ?-? ?end|^(periode?|timeline|masa kontrak|durasi kontrak|contract period|jangka waktu)( kontrak| contract)?$/],
+    ['start', /^(start|mulai|start date|tanggal mulai)$/], ['end', /^(end|selesai|berakhir|end date|tanggal selesai)$/],
+    ['notes', /^notes?$|^catatan$/], ['contract', /^(contract|kontrak)$/],
+    ['quantity', /^(quantity|qty)( ?\/ ?(platform|month|bulan))?$|^(jumlah|total) (video|konten) ?(\/|per) ?(bulan|month)$/],
+    ['total_video', /^(total video|total konten|goal|target video|target konten|jumlah video|total content)s?$/], ['master_drive', /^master drive/],
+    ['kpi_text', /^(kpi|kpi fyp|kpi kontrak|kpi contract|target kpi)$/], ['views_target', /^(target views|kpi views|target total views|total views target)$/],
+    ['platform_text', /^platforms?$/],
   ];
   const ID_MONTHS = { jan: 0, januari: 0, feb: 1, febuari: 1, februari: 1, mar: 2, maret: 2, apr: 3, april: 3, mei: 4, may: 4,
     jun: 5, juni: 5, june: 5, jul: 6, juli: 6, july: 6, agu: 7, ags: 7, agt: 7, aug: 7, agus: 7, agustus: 7, august: 7,
@@ -103,7 +107,7 @@
     let src = String(text || '').toLowerCase();
     const inParens = src.match(/\(([^)]*\d[^)]*)\)/g);   // "4th Contract (15 Sep - 31 Jan)" -> isi kurung
     if (inParens) src = inParens.map((x) => x.slice(1, -1)).join(',');
-    for (const part of src.split(/[,;\n]|\s&\s/)) {
+    for (const part of src.split(/[,;\n|]|\/\/|\s&\s/)) {
       const ends = part.trim().split(/\s*[-–]\s*|\s+s\.?d\.?\s+|\s+to\s+/);
       if (ends.length !== 2) continue;
       const a = ends[0].trim().match(new RegExp('^' + date.source + '$')), b = ends[1].trim().match(new RegExp('^' + date.source + '$'));
@@ -126,67 +130,143 @@
     return out;
   }
   const firstNumber = (t) => { const m = String(t || '').replace(/\./g, '').match(/\d+/); return m ? +m[0] : null; };
+  // Angka dengan satuan: "10,000", "10K", "1jt", "1,5 juta", "2M", "1.000.000".
+  const UNIT = { k: 1e3, rb: 1e3, ribu: 1e3, m: 1e6, jt: 1e6, juta: 1e6, mio: 1e6, million: 1e6 };
+  function numUnit(numText, unit) {
+    unit = (unit || '').toLowerCase();
+    let s = numText.replace(/\s/g, '');
+    if (unit && UNIT[unit] && /^\d+[.,]\d{1,2}$/.test(s)) return Math.round(parseFloat(s.replace(',', '.')) * UNIT[unit]);
+    s = s.replace(/[.,]/g, '');
+    return s ? +s * (UNIT[unit] || 1) : null;
+  }
+  const NUM = String.raw`(\d+(?:[.,]\d+)*)\s*(k|rb|ribu|m|jt|juta|mio|million)?\b`;
+  // Platform yang disebut dalam teks: "TikTok & IG", "TT, IG, YT", "3 Months - TT, IG, YT, Clippo".
+  function platformsIn(text) {
+    const t = ' ' + String(text || '').toLowerCase() + ' ';
+    return [/tik ?tok|[^a-z]tt[^a-z]/.test(t) && 'tiktok', /insta|[^a-z]ig[^a-z]|reels?/.test(t) && 'instagram', /you ?tube|[^a-z]yt[^a-z]|shorts/.test(t) && 'youtube'].filter(Boolean);
+  }
+  // Membaca kalimat KPI. Dua jenis KPI:
+  //  - KPI FYP: jumlah konten yang mencapai batas views ("8 FYP - /FYP: 10,000 Views", "10 video FYP (10K views)")
+  //  - KPI Views: total views semua konten selama timeline kontrak ("KPI: 1.000.000 Views", "Target 5jt views")
+  // Batas views per konten saja ("10K views / video") menjadi target views konten, tanpa jumlah.
+  function parseKpiText(text) {
+    const t = String(text || '').toLowerCase().replace(/\s+/g, ' ');
+    const out = { fyp_count: null, fyp_views: null, views_total: null };
+    if (!/\d/.test(t)) return out;
+    const fc = t.match(/(\d+)\s*(?:video|vids?|konten|content)?\s*(?:yang\s*)?(?:masuk\s*)?fyp/);
+    if (fc) out.fyp_count = +fc[1];
+    const views = [...t.matchAll(new RegExp(NUM + String.raw`\s*(?:total\s*)?views?`, 'g'))].map((m) => ({ n: numUnit(m[1], m[2]), before: t.slice(Math.max(0, m.index - 12), m.index), after: t.slice(m.index, m.index + m[0].length + 12) }));
+    const perVideo = (v) => /fyp ?[:=]|tiap|setiap|each/.test(v.before) || /per ?(video|konten|content)|\/ ?(video|konten|content|fyp)/.test(v.after);
+    const isTotal = (v) => /total|akumulasi|kumulatif|cumulative|semua|all/.test(v.before) || /views? total/.test(v.after);
+    for (const v of views) {
+      if (v.n === null) continue;
+      if (/fyp/.test(t) && out.fyp_views === null && !isTotal(v)) out.fyp_views = v.n;
+      else if (!/fyp/.test(t) && perVideo(v) && !isTotal(v) && out.fyp_views === null) out.fyp_views = v.n;
+      else out.views_total = Math.max(out.views_total || 0, v.n);
+    }
+    return out;
+  }
+  // Tanggal Excel (angka) -> teks "31 Mar 2026" agar bisa dibaca parsePeriods.
+  const serialText = (v) => { const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000); return `${d.getUTCDate()} ${'jan feb mar apr may jun jul aug sep oct nov dec'.split(' ')[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+
   // ws = lembar gaya SheetJS. Mengembalikan null bila tab tidak punya blok info sama sekali.
+  // Dibaca menurut arti isinya, bukan posisi: label bisa berbeda antar macrosheets (Goal / Total Video, Month Start-End /
+  // Start + End), isi bisa tertukar (Quantity "90", Goal "15/Month"), atau label tidak ada sama sekali.
   function parseKpi(ws, utils) {
     if (!ws || !ws['!ref']) return null;
     const range = utils.decode_range(ws['!ref']);
-    const maxR = Math.min(range.e.r, 9), maxC = Math.min(range.e.c, 40);
+    const maxC = Math.min(range.e.c, 40);
     const at = (r, c) => ws[utils.encode_cell({ r, c })];
-    const txt = (r, c) => { const x = at(r, c); return x && x.v !== undefined && x.v !== null ? String(x.v).trim() : ''; };
+    const raw = (r, c) => { const x = at(r, c); return x && x.v !== undefined && x.v !== null && x.v !== '' ? x.v : null; };
+    const txt = (r, c) => { const v = raw(r, c); return v === null ? '' : String(v).trim(); };
     const norm = (t) => t.toLowerCase().replace(/[:：]/g, '').replace(/\s+/g, ' ').trim();
-    const labelOf = (t) => { const n = norm(t); for (const [k, re] of KPI_LABELS) if (re.test(n)) return k; return null; };
+    const labelOf = (t) => { const n = norm(t); if (!n || n.length > 40) return null; for (const [k, re] of KPI_LABELS) if (re.test(n)) return k; return null; };
+    // Blok info berhenti di baris judul tabel konten (baris yang punya kolom Views dan No./Link).
+    let maxR = Math.min(range.e.r, 9);
+    for (let r = range.s.r; r <= maxR; r++) {
+      let v = false, l = false;
+      for (let c = range.s.c; c <= maxC; c++) { const n = norm(txt(r, c)); if (/^views?$/.test(n)) v = true; if (/^(no\.?|acn)$|link|upload/.test(n)) l = true; }
+      if (v && l) { maxR = r - 1; break; }
+    }
     const kpi = { fields: {}, platforms: {} };
-    // Format tabel: baris judul Platform | FYP Quantity | KPI FYP. Label "Platform:" tanpa kolom FYP Quantity
-    // di barisnya adalah format kalimat (lihat kpi_text di bawah), bukan tabel.
-    let platRow = -1, platCol = -1, fypCol = -1, kpiCol = -1;
-    for (let r = range.s.r; r <= maxR && fypCol < 0; r++) {
-      let pc = -1, fc = -1, kc = -1;
+    // Format tabel: baris judul Platform | FYP Quantity | KPI FYP (| KPI Views).
+    let platRow = -1, platCol = -1, fypCol = -1, kpiCol = -1, viewsCol = -1;
+    for (let r = range.s.r; r <= maxR && platRow < 0; r++) {
+      let pc = -1, fc = -1, kc = -1, vc = -1;
       for (let c = range.s.c; c <= maxC; c++) {
         const n = norm(txt(r, c));
-        if (n === 'platform' && pc < 0) pc = c;
-        if (/^fyp quantity/.test(n)) fc = c;
+        if (/^platforms?$/.test(n) && pc < 0) pc = c;
+        if (/^(fyp quantity|fyp views|batas fyp)/.test(n)) fc = c;
         if (/^kpi fyp/.test(n)) kc = c;
+        if (/^(kpi|target) (total )?views/.test(n)) vc = c;
       }
-      if (pc >= 0 && fc >= 0) { platRow = r; platCol = pc; fypCol = fc; kpiCol = kc; }
+      if (pc >= 0 && (fc >= 0 || vc >= 0)) { platRow = r; platCol = pc; fypCol = fc; kpiCol = kc; viewsCol = vc; }
     }
+    const used = new Set();
     for (let r = range.s.r; r <= maxR; r++) for (let c = range.s.c; c <= maxC; c++) {
+      if (r === platRow && c >= platCol) continue;
       const key = labelOf(txt(r, c));
-      if (!key || key in kpi.fields) continue;
+      if (!key) continue;
+      used.add(r + ':' + c);
+      if (key in kpi.fields) continue;
+      // Nilai = sel isi pertama di kanan label (sebelum label berikutnya / tabel Platform).
       for (let v = c + 1; v <= maxC; v++) {
-        if (platRow >= 0 && v >= platCol) break;
+        if (platRow >= 0 && r >= platRow && v >= platCol) break;
         const t = txt(r, v);
         if (!t) continue;
         if (labelOf(t)) break;
-        kpi.fields[key] = t;
+        const val = raw(r, v);
+        kpi.fields[key] = typeof val === 'number' && val > 30000 && val < 80000 && /^(period|start|end)$/.test(key) ? serialText(val) : t;
+        used.add(r + ':' + v);
         const link = at(r, v) && at(r, v).l && at(r, v).l.Target;
         if (key === 'master_drive' && link) kpi.master_drive_url = link;
         break;
       }
     }
-    if (platRow >= 0 && fypCol >= 0) {
-      for (let r = platRow + 1; r <= maxR; r++) {
-        const name = norm(txt(r, platCol));
-        const p = /tik ?tok/.test(name) ? 'tiktok' : /insta|^ig$/.test(name) ? 'instagram' : /you ?tube|^yt$/.test(name) ? 'youtube' : null;
+    // Isi tanpa label (mis. tab Lazada): dikenali dari bentuknya.
+    const loose = [];
+    for (let r = range.s.r; r <= maxR; r++) for (let c = range.s.c; c <= maxC; c++) {
+      if (used.has(r + ':' + c) || (r >= platRow && platRow >= 0 && c >= platCol)) continue;
+      const t = txt(r, c);
+      if (t && /\d/.test(t) && t.length <= 120 && !labelOf(t) && typeof raw(r, c) === 'string') loose.push(t);
+    }
+    if (platRow >= 0) {
+      for (let r = platRow + 1; r <= maxR + 3 && r <= range.e.r; r++) {
+        const p = platformsIn(txt(r, platCol))[0];
         if (!p) continue;
-        const fyp = cellNum(at(r, fypCol)), k = kpiCol >= 0 ? cellNum(at(r, kpiCol)) : null;
+        const fyp = fypCol >= 0 ? cellNum(at(r, fypCol)) : null, k = kpiCol >= 0 ? cellNum(at(r, kpiCol)) : null;
+        const vt = viewsCol >= 0 ? (() => { const m = txt(r, viewsCol).toLowerCase().match(new RegExp(NUM)); return m ? numUnit(m[1], m[2]) : null; })() : null;
         if (fyp !== null || k !== null) kpi.platforms[p] = { fyp, kpi: k };
+        if (vt) (kpi.views_kpi ||= { target: 0, by_platform: {} }).by_platform[p] = vt;
       }
+      if (kpi.views_kpi) kpi.views_kpi.target = Object.values(kpi.views_kpi.by_platform).reduce((a, x) => a + x, 0);
     }
-    // Format kalimat: "KPI: 8 FYP - /FYP: 10,000 Views" + "Platform: TikTok" (atau "TikTok & IG").
-    if (!Object.keys(kpi.platforms).length && kpi.fields.kpi_text) {
-      const t = kpi.fields.kpi_text.toLowerCase();
-      const num = (x) => { if (!x) return null; const m = x[1].replace(/[.,\s]/g, ''); return +m * (/^(k|rb|ribu)/.test(x[2] || '') ? 1000 : /^(m|jt|juta)/.test(x[2] || '') ? 1000000 : 1); };
-      const views = num(t.match(/(\d[\d.,]*)\s*(k|rb|ribu|m|jt|juta)?\b\s*views?/));
-      const count = num(t.match(/(\d[\d.,]*)\s*()(?:video\s*)?fyp/));
-      const pt = (kpi.fields.platform_text || '').toLowerCase();
-      let plats = [/tik ?tok|\btt\b/.test(pt) && 'tiktok', /insta|\big\b|reels?/.test(pt) && 'instagram', /you ?tube|\byt\b|shorts/.test(pt) && 'youtube'].filter(Boolean);
-      if (!plats.length) plats = ['tiktok', 'instagram', 'youtube'];
-      if (views !== null || count !== null) for (const p of plats) kpi.platforms[p] = { fyp: views, kpi: count };
+    const f = kpi.fields;
+    // KPI dalam kalimat (label KPI / Target / Platform).
+    const kt = parseKpiText([f.kpi_text, f.views_target].filter(Boolean).join(' ; '));
+    const plats = platformsIn(f.platform_text).length ? platformsIn(f.platform_text) : platformsIn(f.kpi_text);
+    if (!Object.keys(kpi.platforms).length && (kt.fyp_count !== null || kt.fyp_views !== null)) {
+      for (const p of plats.length ? plats : ['tiktok', 'instagram', 'youtube']) kpi.platforms[p] = { fyp: kt.fyp_views, kpi: kt.fyp_count };
     }
-    if (!Object.keys(kpi.fields).length && !Object.keys(kpi.platforms).length) return null;
-    kpi.quantity_per_month = /month|bulan/i.test(kpi.fields.quantity || '') ? firstNumber(kpi.fields.quantity) : null;
-    kpi.total_videos = firstNumber(kpi.fields.total_video);
-    const per = parsePeriods(kpi.fields.period);
+    if (!kpi.views_kpi && kt.views_total) kpi.views_kpi = { target: kt.views_total, platforms: plats.length ? plats : null };
+    const contractPlats = platformsIn(f.contract);
+    if (plats.length || contractPlats.length) kpi.contract_platforms = plats.length ? plats : contractPlats;
+
+    // Kuantitas: "x/Month" = per bulan; angka lain di Goal / Total Video / Quantity = total video kontrak.
+    const perMonth = (t) => { const m = String(t || '').toLowerCase().match(/(\d+)\s*(?:video|vids?|konten|content)?\s*\/\s*(?:1\s*)?(month|bulan|bln|mo)\b|(\d+)\s*(?:video|vids?|konten|content)?\s*(per|tiap|setiap)\s*(month|bulan)/); return m ? +(m[1] || m[3]) : null; };
+    const totalOf = (t) => { const s = String(t || '').toLowerCase(); if (!/\d/.test(s) || perMonth(s.split(/\s-\s/)[0]) !== null) return null; return firstNumber(s); };
+    kpi.quantity_per_month = [f.quantity, f.total_video, ...loose].map(perMonth).find((x) => x !== null) ?? null;
+    kpi.total_videos = [f.total_video, f.quantity].map(totalOf).find((x) => x !== null)
+      ?? loose.map((t) => (/^\s*\d+\s*(video|vids?|konten|content)s?\b/i.test(t) ? firstNumber(t) : null)).find((x) => x !== null) ?? null;
+    // Goal "30/ Month" padahal Quantity "15/ Month": angka Goal yang berbeda itu adalah total kontrak (salah tulis).
+    if (kpi.total_videos === null && perMonth(f.total_video) !== null && perMonth(f.total_video) !== kpi.quantity_per_month) kpi.total_videos = perMonth(f.total_video);
+
+    // Timeline kontrak: Month Start-End, atau Start + End, atau tanggal dalam kurung di Contract, atau isi tanpa label.
+    let periodText = f.period || [f.start, f.end].filter(Boolean).join(' - ');
+    let per = parsePeriods(periodText);
+    if (!per.length) for (const t of [f.contract, ...loose]) { const p = parsePeriods(t); if (p.length) { per = p; periodText = t; break; } }
+    if (!f.period && periodText) f.period = periodText;
+    if (!Object.keys(f).length && !Object.keys(kpi.platforms).length && !kpi.views_kpi) return null;
     kpi.periods = [...per];
     if (per.guessed && per.length) kpi.period_year_assumed = true;
     return kpi;

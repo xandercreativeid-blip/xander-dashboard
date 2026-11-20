@@ -35,3 +35,28 @@ test('periode kontrak dari teks macrosheets', () => {
   assert.deepEqual(P('Unlimited'), []);
   assert.deepEqual(P('TBC FROM BD'), []);
 });
+
+test('blok KPI dibaca menurut artinya (format Kenkun, Selvy, Belva)', async () => {
+  const { utils } = await import('../supabase/functions/sync-sheet/xlsxlite.js');
+  const grid = (rows) => { const ws = {}; let mr = 0, mc = 0; rows.forEach((row, r) => row.forEach((v, c) => { if (v !== '') { ws[utils.encode_cell({ r, c })] = { v }; mr = Math.max(mr, r); mc = Math.max(mc, c); } })); ws['!ref'] = 'A1:' + utils.encode_cell({ r: mr, c: mc }); return ws; };
+  const K = (rows) => globalThis.XSheet.parseKpi(grid(rows), utils);
+  // Selvy: KPI dalam kalimat
+  let k = K([['Contract:', '3 MONTHS', 'KPI:', '8 FYP - /FYP: 10,000 Views'], ['Quantity:', '30/ Month', 'Platform:', 'TikTok'], ['Goal:', '90 / 3 month'], ['MONTH START-END', '4th Contract (15 Sep - 31 Jan 2027)']]);
+  assert.deepEqual(k.platforms, { tiktok: { fyp: 10000, kpi: 8 } });
+  assert.equal(k.quantity_per_month, 30); assert.equal(k.total_videos, 90);
+  // Kenkun: tabel Platform | FYP Quantity | KPI FYP
+  k = K([['Nama Brand', 'X', 'Contract', '6 Month', 'Platform', 'FYP Quantity', 'KPI FYP'], ['PM', 'Ken', 'Quantity', '15/ MONTH', 'TikTok', 10000, 10], ['', '', 'Total Video', '90 Vids', 'Instagram', 10000, '-']]);
+  assert.deepEqual(k.platforms, { tiktok: { fyp: 10000, kpi: 10 }, instagram: { fyp: 10000, kpi: null } });
+  assert.equal(k.total_videos, 90);
+  // KPI berdasarkan total views selama kontrak
+  k = K([['Contract:', '3 Months'], ['KPI:', '1.000.000 Views'], ['Platform:', 'TikTok, IG']]);
+  assert.deepEqual(k.views_kpi, { target: 1000000, platforms: ['tiktok', 'instagram'] });
+  assert.deepEqual(k.platforms, {});
+  // Isi tertukar (Quantity "90", Goal "15/Month") dan Goal "30/ Month" yang maksudnya total
+  k = K([['Quantity:', '90'], ['Goal:', '15/Month']]); assert.equal(k.quantity_per_month, 15); assert.equal(k.total_videos, 90);
+  k = K([['Contract:', '2 Months'], ['Quantity:', '15/ Month'], ['Goal:', '30/ Month']]); assert.equal(k.quantity_per_month, 15); assert.equal(k.total_videos, 30);
+  // Start + End terpisah (End berupa tanggal Excel), dan tanpa label sama sekali
+  k = K([['Start:', '23 Sept'], ['End:', 46112]]); assert.deepEqual([...k.periods], [['2025-09-23', '2026-03-31']]);
+  k = K([['Nama Brand:', 'LAZADA', '3 Month (27 Juni 2026 - 6 Nov 2026)'], ['PM:', 'BELVA', '15/ MONTH'], ['', '', '45 Video']]);
+  assert.equal(k.quantity_per_month, 15); assert.equal(k.total_videos, 45); assert.deepEqual([...k.periods], [['2026-06-27', '2026-11-06']]);
+});

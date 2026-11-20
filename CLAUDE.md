@@ -28,6 +28,12 @@ Tampilan dashboard berbahasa **Inggris**.
   sampai angka di macrosheets berubah.
 - ER = (likes + comments + shares + saves) / views. Target views default 10K; FYP Quantity di blok KPI
   macrosheets menjadi target per platform.
+- Blok KPI di atas tiap tab dibaca menurut **artinya**, bukan posisi atau template: format antar macrosheets berbeda
+  (Kenkun: tabel Platform | FYP Quantity | KPI FYP; Selvy: kalimat "KPI: 8 FYP - /FYP: 10,000 Views" + "Platform:";
+  label bisa hilang, tertukar, atau Start/End terpisah). Lihat `parseKpi` di `web/sheet.js` dan ujinya di
+  `tests/core.test.mjs`. Format baru: tambahkan polanya, jangan ganti pola lama.
+- Ada dua jenis KPI kontrak: **KPI FYP** (jumlah konten yang mencapai batas views) dan **KPI Views** (total views
+  semua konten yang diposting dalam timeline kontrak). Keduanya dihitung per kontrak.
 - Tab yang di-hide di macrosheets = brand Archived. Link yang dihapus dari macrosheets hilang dari dashboard.
 - Hanya email di tabel `team_members` yang bisa melihat data (RLS `is_member()`).
 - Jangan pernah meminta, membaca, atau menampilkan password/kredensial. Tab kredensial di macrosheets dilewati.
