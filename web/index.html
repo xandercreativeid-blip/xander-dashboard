@@ -592,6 +592,7 @@ function kpiCard(b) {
   const info = [['Contract', esc(f.contract || '–')], ['Contract period', period + (cr ? `<div class="sub">${left > 0 ? `${left} days left` : left === 0 ? 'Ends today' : `Ended ${-left} days ago`}</div>` : '')],
     ['Quantity', esc(f.quantity || '–')], ['Total video', esc(f.total_video || '–')], ['PM', esc(f.pm || '–')], ['Scriptwriter', esc(f.scriptwriter || '–')],
     ['Master drive', k.master_drive_url ? `<a href="${esc(k.master_drive_url)}" target="_blank" rel="noopener">${esc(f.master_drive || 'Open')}</a>` : esc(f.master_drive || '–')],
+    ...(f.kpi_text ? [['KPI', esc(f.kpi_text) + (f.platform_text ? ` · ${esc(f.platform_text)}` : '')]] : []),
     ...(f.notes ? [['Notes', esc(f.notes)]] : [])];
   const platsUsed = Object.keys(PLAT).filter((p) => st.posted[p] || st.thisMonth[p]);
   const perPlat = (o) => platsUsed.map((p) => `${PLAT[p]} ${o[p]}`).join(' · ');

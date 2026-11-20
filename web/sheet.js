@@ -87,6 +87,7 @@
     ['brand_name', /^nama brand/], ['scriptwriter', /^script ?writer/], ['pm', /^(pm|project manager)$/],
     ['period', /^month st(a|ra)rt/], ['notes', /^notes?\b/], ['contract', /^contract/], ['quantity', /^quantity/],
     ['total_video', /^(total video|goal)/], ['master_drive', /^master drive/],
+    ['kpi_text', /^kpi( fyp)?$/], ['platform_text', /^platforms?$/],
   ];
   const ID_MONTHS = { jan: 0, januari: 0, feb: 1, febuari: 1, februari: 1, mar: 2, maret: 2, apr: 3, april: 3, mei: 4, may: 4,
     jun: 5, juni: 5, june: 5, jul: 6, juli: 6, july: 6, agu: 7, ags: 7, agt: 7, aug: 7, agus: 7, agustus: 7, august: 7,
@@ -135,12 +136,18 @@
     const norm = (t) => t.toLowerCase().replace(/[:：]/g, '').replace(/\s+/g, ' ').trim();
     const labelOf = (t) => { const n = norm(t); for (const [k, re] of KPI_LABELS) if (re.test(n)) return k; return null; };
     const kpi = { fields: {}, platforms: {} };
+    // Format tabel: baris judul Platform | FYP Quantity | KPI FYP. Label "Platform:" tanpa kolom FYP Quantity
+    // di barisnya adalah format kalimat (lihat kpi_text di bawah), bukan tabel.
     let platRow = -1, platCol = -1, fypCol = -1, kpiCol = -1;
-    for (let r = range.s.r; r <= maxR; r++) for (let c = range.s.c; c <= maxC; c++) {
-      const n = norm(txt(r, c));
-      if (n === 'platform' && platRow < 0) { platRow = r; platCol = c; }
-      if (r === platRow && /^fyp quantity/.test(n)) fypCol = c;
-      if (r === platRow && /^kpi fyp/.test(n)) kpiCol = c;
+    for (let r = range.s.r; r <= maxR && fypCol < 0; r++) {
+      let pc = -1, fc = -1, kc = -1;
+      for (let c = range.s.c; c <= maxC; c++) {
+        const n = norm(txt(r, c));
+        if (n === 'platform' && pc < 0) pc = c;
+        if (/^fyp quantity/.test(n)) fc = c;
+        if (/^kpi fyp/.test(n)) kc = c;
+      }
+      if (pc >= 0 && fc >= 0) { platRow = r; platCol = pc; fypCol = fc; kpiCol = kc; }
     }
     for (let r = range.s.r; r <= maxR; r++) for (let c = range.s.c; c <= maxC; c++) {
       const key = labelOf(txt(r, c));
@@ -164,6 +171,17 @@
         const fyp = cellNum(at(r, fypCol)), k = kpiCol >= 0 ? cellNum(at(r, kpiCol)) : null;
         if (fyp !== null || k !== null) kpi.platforms[p] = { fyp, kpi: k };
       }
+    }
+    // Format kalimat: "KPI: 8 FYP - /FYP: 10,000 Views" + "Platform: TikTok" (atau "TikTok & IG").
+    if (!Object.keys(kpi.platforms).length && kpi.fields.kpi_text) {
+      const t = kpi.fields.kpi_text.toLowerCase();
+      const num = (x) => { if (!x) return null; const m = x[1].replace(/[.,\s]/g, ''); return +m * (/^(k|rb|ribu)/.test(x[2] || '') ? 1000 : /^(m|jt|juta)/.test(x[2] || '') ? 1000000 : 1); };
+      const views = num(t.match(/(\d[\d.,]*)\s*(k|rb|ribu|m|jt|juta)?\b\s*views?/));
+      const count = num(t.match(/(\d[\d.,]*)\s*()(?:video\s*)?fyp/));
+      const pt = (kpi.fields.platform_text || '').toLowerCase();
+      let plats = [/tik ?tok|\btt\b/.test(pt) && 'tiktok', /insta|\big\b|reels?/.test(pt) && 'instagram', /you ?tube|\byt\b|shorts/.test(pt) && 'youtube'].filter(Boolean);
+      if (!plats.length) plats = ['tiktok', 'instagram', 'youtube'];
+      if (views !== null || count !== null) for (const p of plats) kpi.platforms[p] = { fyp: views, kpi: count };
     }
     if (!Object.keys(kpi.fields).length && !Object.keys(kpi.platforms).length) return null;
     kpi.quantity_per_month = /month|bulan/i.test(kpi.fields.quantity || '') ? firstNumber(kpi.fields.quantity) : null;
