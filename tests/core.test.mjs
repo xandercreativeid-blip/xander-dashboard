@@ -60,3 +60,13 @@ test('blok KPI dibaca menurut artinya (format Kenkun, Selvy, Belva)', async () =
   k = K([['Nama Brand:', 'LAZADA', '3 Month (27 Juni 2026 - 6 Nov 2026)'], ['PM:', 'BELVA', '15/ MONTH'], ['', '', '45 Video']]);
   assert.equal(k.quantity_per_month, 15); assert.equal(k.total_videos, 45); assert.deepEqual([...k.periods], [['2026-06-27', '2026-11-06']]);
 });
+
+test('tabel KPI dengan judul "Platform (+Clippo)" dan KPI views di sel gabungan', async () => {
+  const { utils } = await import('../supabase/functions/sync-sheet/xlsxlite.js');
+  const ws = {}; const rows = [['Contract:', '6 Months', 'Platform (+Clippo)', 'FYP Quantity', 'KPI FYP'], ['Quantity:', '20/ Month', 'TikTok', '10.000', '60,000,000 Views'], ['Goal:', '240 Content', 'Instagram', '10.000'], ['MONTH START-END', '10 AGS - 26 MAR', 'Youtube', '10.000']];
+  rows.forEach((row, r) => row.forEach((v, c) => { ws[utils.encode_cell({ r, c })] = { v }; })); ws['!ref'] = 'A1:E4';
+  const k = globalThis.XSheet.parseKpi(ws, utils);
+  assert.deepEqual(k.platforms, { tiktok: { fyp: 10000, kpi: null }, instagram: { fyp: 10000, kpi: null }, youtube: { fyp: 10000, kpi: null } });
+  assert.deepEqual(k.views_kpi, { target: 60000000, platforms: ['tiktok', 'instagram', 'youtube'] });
+  assert.equal(k.quantity_per_month, 20); assert.equal(k.total_videos, 240); assert.equal(k.periods.length, 1);
+});

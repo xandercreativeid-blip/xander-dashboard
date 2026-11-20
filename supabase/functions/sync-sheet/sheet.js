@@ -195,7 +195,7 @@
       let pc = -1, fc = -1, kc = -1, vc = -1;
       for (let c = range.s.c; c <= maxC; c++) {
         const n = norm(txt(r, c));
-        if (/^platforms?$/.test(n) && pc < 0) pc = c;
+        if (/^platforms?\b/.test(n) && pc < 0) pc = c;   // "Platform", "Platform (+Clippo)"
         if (/^(fyp quantity|fyp views|batas fyp)/.test(n)) fc = c;
         if (/^kpi fyp/.test(n)) kc = c;
         if (/^(kpi|target) (total )?views/.test(n)) vc = c;
@@ -231,15 +231,24 @@
       if (t && /\d/.test(t) && t.length <= 120 && !labelOf(t) && typeof raw(r, c) === 'string') loose.push(t);
     }
     if (platRow >= 0) {
+      const tablePlats = [], kpiViews = [];
       for (let r = platRow + 1; r <= maxR + 3 && r <= range.e.r; r++) {
         const p = platformsIn(txt(r, platCol))[0];
         if (!p) continue;
-        const fyp = fypCol >= 0 ? cellNum(at(r, fypCol)) : null, k = kpiCol >= 0 ? cellNum(at(r, kpiCol)) : null;
+        tablePlats.push(p);
+        const fyp = fypCol >= 0 ? cellNum(at(r, fypCol)) : null;
+        let k = kpiCol >= 0 ? cellNum(at(r, kpiCol)) : null;
+        // Kolom KPI FYP bisa berisi kalimat: "8 FYP" (jumlah) atau "60,000,000 Views" (KPI total views).
+        const kt = kpiCol >= 0 && k === null ? parseKpiText(txt(r, kpiCol)) : null;
+        if (kt && kt.fyp_count !== null) k = kt.fyp_count;
+        if (kt && kt.views_total) kpiViews.push({ p, n: kt.views_total });
         const vt = viewsCol >= 0 ? (() => { const m = txt(r, viewsCol).toLowerCase().match(new RegExp(NUM)); return m ? numUnit(m[1], m[2]) : null; })() : null;
+        if (vt) kpiViews.push({ p, n: vt });
         if (fyp !== null || k !== null) kpi.platforms[p] = { fyp, kpi: k };
-        if (vt) (kpi.views_kpi ||= { target: 0, by_platform: {} }).by_platform[p] = vt;
       }
-      if (kpi.views_kpi) kpi.views_kpi.target = Object.values(kpi.views_kpi.by_platform).reduce((a, x) => a + x, 0);
+      // Satu angka views untuk beberapa platform (sel digabung) = target gabungan semua platform di tabel.
+      if (kpiViews.length === 1 && tablePlats.length > 1) kpi.views_kpi = { target: kpiViews[0].n, platforms: tablePlats };
+      else if (kpiViews.length) kpi.views_kpi = { target: kpiViews.reduce((a, x) => a + x.n, 0), by_platform: Object.fromEntries(kpiViews.map((x) => [x.p, x.n])) };
     }
     const f = kpi.fields;
     // KPI dalam kalimat (label KPI / Target / Platform).
