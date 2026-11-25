@@ -85,9 +85,9 @@ views lebih besar.
 ## Akses
 
 Hanya email yang ada di daftar anggota tim (menu **Data Sources & Settings**, tanpa batas jumlah) yang bisa melihat
-atau mengubah data. Akun login dibuat dari menu **Team Accounts**: pilih email → **Create account** → bagikan password
-awalnya secara pribadi; anggota bisa menggantinya lewat **Change my password**. Cara ini tidak memakai email, jadi tidak
-terkena batas pengiriman email Supabase.
+atau mengubah data. Daftarkan email anggota di menu **Team Accounts** (tanpa batas). Anggota lalu klik **Create Account** di halaman
+login dengan email itu; akunnya langsung aktif tanpa email konfirmasi. **Remove** mengeluarkan anggota yang sudah tidak
+satu tim dan menghapus akun login-nya. Admin juga bisa membuatkan akun atau mereset password yang lupa.
 
 ## Catatan
 

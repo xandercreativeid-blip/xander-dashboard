@@ -36,8 +36,11 @@ Tampilan dashboard berbahasa **Inggris**.
   semua konten yang diposting dalam timeline kontrak). Keduanya dihitung per kontrak.
 - Tab yang di-hide di macrosheets = brand Archived. Link yang dihapus dari macrosheets hilang dari dashboard.
 - Hanya email di tabel `team_members` yang bisa melihat data (RLS `is_member()`).
-- Akun anggota dibuat dari dashboard (menu **Team Accounts**, fungsi `team-admin`) tanpa email, karena layanan email
-  bawaan Supabase hanya mengirim ke anggota tim akun Supabase dan dibatasi per jam. Jumlah anggota tidak dibatasi.
+- Akun anggota tanpa email (layanan email bawaan Supabase hanya mengirim ke anggota tim akun Supabase dan dibatasi
+  per jam). Admin mendaftarkan email di **Team Accounts** (tanpa batas); pemilik email itu klik **Create Account** di
+  halaman login dan akunnya langsung aktif (fungsi `team-admin`, aksi `signup`, hanya untuk email di daftar yang belum
+  punya akun aktif). **Remove** mengeluarkan anggota sekaligus menghapus akun login-nya. Admin juga bisa membuatkan
+  akun / reset password.
 - Jangan pernah meminta, membaca, atau menampilkan password/kredensial. Tab kredensial di macrosheets dilewati.
   Kunci YouTube API dan sesi IG diisi pengguna sendiri lewat dashboard (tersimpan di `private_config`,
   tidak bisa dibaca kembali).
@@ -52,7 +55,8 @@ Jalankan berurutan. Hubungkan konektor **GitHub** dan **Supabase** di akun Claud
 2. **Database**: jalankan `install/install.sql` (apply_migration). Lalu tambahkan email pengguna sebagai
    anggota tim pertama: `insert into team_members (email) values (lower('<email pengguna>'));`
 3. **Edge Functions**: deploy `supabase/functions/sync-sheet` (file: index.ts, xlsxlite.js, urls.js, sheet.js),
-   `supabase/functions/collect` (index.ts) dan `supabase/functions/team-admin` (index.ts), semuanya `verify_jwt: true`.
+   `supabase/functions/collect` (index.ts) dengan `verify_jwt: true`, dan `supabase/functions/team-admin` (index.ts)
+   dengan `verify_jwt: false` (fungsi ini memeriksa login sendiri; aksi signup dipanggil dari halaman login).
 4. **Jadwal**: isi `<PROJECT_REF>` dan `<ANON_JWT>` di `install/cron.sql` lalu jalankan. Kunci anon JWT ada di
    Project Settings → API Keys → Legacy API keys. Jangan simpan kunci itu ke repo.
 5. **Login**: di Supabase → Authentication → URL Configuration, isi Site URL dengan alamat GitHub Pages

@@ -353,7 +353,7 @@ const DB = {
     const have = new Set(await this.getTeam());
     const add = [...want].filter((e) => !have.has(e)), del = [...have].filter((e) => !want.has(e));
     if (add.length) this.ok(await this.sb.from('team_members').insert(add.map((email) => ({ email }))));
-    if (del.length) this.ok(await this.sb.from('team_members').delete().in('email', del));
+    for (const email of del) await this.teamAdmin({ action: 'remove', email });   // keluarkan + hapus akun login
   },
   async setPrivate(key, value) { this.ok(await this.sb.rpc('set_private_config', { p_key: key, p_value: value })); },
   async privateStatus() { try { return this.ok(await this.sb.rpc('private_config_status')) || {}; } catch { return {}; } },
@@ -1455,7 +1455,7 @@ async function settingsDialog() {
       ${ls?.at ? `Last checked ${ago(ls.at)}${ls.last_added_at ? ` · last new link added ${ago(ls.last_added_at)}` : ''}.` : 'Not synced yet.'}${S.settings.sheet_sync_error ? `<br><span style="color:var(--bad)">Auto sync failed ${ago(S.settings.sheet_sync_error.at)}: ${esc(S.settings.sheet_sync_error.error)}</span>` : ''}</div>
     <label>YouTube API key ${priv.youtube_api_key ? '(saved — leave empty to keep it)' : '(not set — without it YouTube often fails and comments stay empty)'}<input name="yt" type="password" autocomplete="off" placeholder="${priv.youtube_api_key ? '••••••••' : 'AIza…'}"></label>
     <label>Instagram session / “sessionid” cookie ${priv.ig_sessionid ? '(saved)' : '(not set — without it Instagram cannot be fetched automatically)'}<input name="ig" type="password" autocomplete="off" placeholder="${priv.ig_sessionid ? '••••••••' : ''}"></label>
-    <label>Team members allowed to open the dashboard (one email per line, no limit). After saving, create their sign-in under “Team Accounts…”.<textarea name="team" style="min-height:84px">${esc(team.join('\n'))}</textarea></label>
+    <label>Team members allowed to open the dashboard (one email per line, no limit). Listed members can create their own account on the sign-in page; removing an email here also deletes that person's sign-in.<textarea name="team" style="min-height:84px">${esc(team.join('\n'))}</textarea></label>
     <div class="hint"><b>Last data update:</b> ${cs?.at ? `${ago(cs.at)} — ${cs.queued} contents processed.<br>${['tiktok', 'instagram', 'youtube'].map(line).filter(Boolean).join('<br>')}` : 'no record yet.'}</div>
     <div class="hint" id="syncProgress" hidden style="white-space:pre-line;border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--text)"></div>
     <div class="foot"><span><button class="btn" value="sync">Save &amp; Sync Now</button> <button class="btn" value="accounts">Save &amp; Team Accounts…</button></span><span><button class="btn" value="cancel" formnovalidate>Cancel</button> <button class="btn primary" value="save">Save</button></span></div>`,
@@ -1491,10 +1491,14 @@ async function teamDialog() {
   const me = LIVE ? (await DB.sb.auth.getUser()).data.user?.email?.toLowerCase() : '';
   const status = (m) => !m.account ? '<span class="badge warn">No account yet</span>' : m.confirmed ? `<span class="badge good">Active</span> <span class="sub">${m.last_sign_in_at ? 'last sign-in ' + ago(m.last_sign_in_at) : 'never signed in'}</span>` : '<span class="badge warn">Not confirmed</span>';
   const d = dialog(`<h3>Team Accounts</h3>
-    <div class="hint">Create a sign-in for any email on the team list — no email is sent and there is no limit. Share the password with the member privately (not in a group chat); they can change it after signing in. Add or remove emails under “Data Sources &amp; Settings”.</div>
-    <div class="scroll"><table><thead><tr><th>Email</th><th>Status</th><th></th></tr></thead><tbody>
-    ${list.map((m) => `<tr><td>${esc(m.email)}${m.email === me ? ' <span class="sub">(you)</span>' : ''}</td><td>${status(m)}</td><td style="text-align:right"><button type="button" class="btn" data-acct="${esc(m.email)}">${m.account ? 'Set new password' : 'Create account'}</button></td></tr>`).join('') || '<tr><td colspan="3" class="sub">No team members yet.</td></tr>'}
-    </tbody></table></div>
+    <div class="hint">Add a member's email here (no limit). They can then choose “Create Account” on the sign-in page themselves — no confirmation email is needed. You can also create the account for them, reset a forgotten password, or remove someone who has left the team (their sign-in is deleted too).</div>
+    <div style="display:flex;gap:8px;margin:8px 0"><input name="newEmail" type="email" placeholder="name@company.com" style="flex:1" autocomplete="off"><button type="button" class="btn primary" id="acctAdd">Add to team</button></div>
+    <div style="max-height:46vh;overflow:auto">
+    ${list.map((m) => `<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;border-top:1px solid var(--line);padding:9px 0">
+      <div style="flex:1 1 220px;min-width:0"><div style="word-break:break-all">${esc(m.email)}${m.email === me ? ' <span class="sub">(you)</span>' : ''}</div><div style="margin-top:3px">${status(m)}</div></div>
+      <div style="display:flex;gap:6px"><button type="button" class="btn" style="padding:4px 9px" data-acct="${esc(m.email)}">${m.account ? 'Reset password' : 'Create account'}</button>${m.email === me ? '' : `<button type="button" class="btn" style="padding:4px 9px;color:var(--bad)" data-remove="${esc(m.email)}" title="Remove from the team and delete this sign-in">Remove</button>`}</div>
+    </div>`).join('') || '<div class="sub">No team members yet.</div>'}
+    </div>
     <div id="acctForm" hidden style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:10px">
       <div><b id="acctEmail"></b></div>
       <label>Password (at least 8 characters)<input name="pw" autocomplete="new-password" minlength="8"></label>
@@ -1506,13 +1510,26 @@ async function teamDialog() {
   d.querySelectorAll('[data-acct]').forEach((b) => b.addEventListener('click', () => { target = b.dataset.acct; $('#acctEmail', d).textContent = target; pw.value = newPassword(); form.hidden = false; pw.focus(); pw.select(); }));
   $('#myPw', d).addEventListener('click', () => { target = me; $('#acctEmail', d).textContent = `${me} (you)`; pw.value = ''; form.hidden = false; pw.focus(); });
   $('#acctGen', d).addEventListener('click', () => { pw.value = newPassword(); pw.select(); });
+  const reopen = async (msg) => { d.close(); await teamDialog(); toast(msg); };
+  $('#acctAdd', d).addEventListener('click', async () => {
+    const emails = $('input[name=newEmail]', d).value.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter((e) => /^\S+@\S+\.\S+$/.test(e));
+    if (!emails.length) { toast('Enter a valid email address.'); return; }
+    try { await DB.teamAdmin({ action: 'add', emails }); await reopen(`${emails.join(', ')} added. They can now create their account on the sign-in page.`); }
+    catch (e) { toast('Failed: ' + e.message); }
+  });
+  d.querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', async () => {
+    const email = b.dataset.remove;
+    if (!confirm(`Remove ${email} from the team?\n\nThey will no longer be able to sign in, and their sign-in account is deleted. You can add them again later.`)) return;
+    try { const r = await DB.teamAdmin({ action: 'remove', email }); await reopen(`${email} removed from the team${r.account_deleted ? ' and their sign-in deleted' : ''}.`); }
+    catch (e) { toast('Failed: ' + e.message); }
+  }));
   $('#acctSave', d).addEventListener('click', async () => {
     if (pw.value.length < 8) { toast('Password must be at least 8 characters.'); return; }
     try {
       let msg;
       if (target === me) { const { error } = await DB.sb.auth.updateUser({ password: pw.value }); if (error) throw error; msg = 'Your password has been changed.'; }
       else { const r = await DB.teamAdmin({ action: 'set_password', email: target, password: pw.value }); msg = r.created ? `Account created for ${target}. Share the password with them privately.` : `New password set for ${target}.`; }
-      d.close(); await teamDialog(); toast(msg);
+      await reopen(msg);
     } catch (e) { toast('Failed: ' + e.message); }
   });
 }
@@ -1524,7 +1541,7 @@ function loginScreen(msg = '', signup = false) {
     <label>Password${signup ? ' (at least 8 characters)' : ''}<br><input name="password" type="password" required minlength="${signup ? 8 : 1}" autocomplete="${signup ? 'new-password' : 'current-password'}" style="width:100%"></label>
     <button class="btn primary">${signup ? 'Create Account' : 'Sign In'}</button>
     <button type="button" class="btn ghost" id="swap">${signup ? 'Already have an account? Sign in' : 'No account yet? Create one'}</button>
-    ${signup ? '' : '<div class="sub">No account yet? A team admin can also create one for you under “Team Accounts”.</div>'}
+    <div class="sub">${signup ? 'Use the email your team admin added to the team list. Your account is active right away.' : 'First time here? If an admin has added your email, choose “Create one” above.'}</div>
     <div class="sub" id="loginMsg">${esc(msg)}</div></form></div>`;
   $('#swap').addEventListener('click', () => loginScreen('', !signup));
   $('#login').addEventListener('submit', async (e) => {
@@ -1532,12 +1549,12 @@ function loginScreen(msg = '', signup = false) {
     const fd = new FormData(e.target), cred = { email: fd.get('email').trim(), password: fd.get('password') };
     $('#loginMsg').textContent = 'Processing…';
     if (signup) {
-      const { data, error } = await DB.sb.auth.signUp(cred);
-      if (error) return loginScreen(/registered|exists/i.test(error.message) ? 'This email already has an account. Please sign in.'
-        : /rate limit|not authorized|sending/i.test(error.message) ? 'The confirmation email could not be sent. Ask a team admin to create your account under “Team Accounts”, then sign in here.'
-        : 'Could not create the account: ' + error.message, true);
-      if (data.session) return start();
-      return loginScreen('Account created. Open your email, click the confirmation link, then sign in here.');
+      // Tanpa email konfirmasi: hanya email yang sudah didaftarkan admin di daftar tim yang bisa membuat akun.
+      try { await DB.teamAdmin({ action: 'signup', email: cred.email, password: cred.password }); }
+      catch (err) { return loginScreen(err.message, true); }
+      const { error } = await DB.sb.auth.signInWithPassword(cred);
+      if (error) return loginScreen('Account created. Please sign in.');
+      return start();
     }
     const { error } = await DB.sb.auth.signInWithPassword(cred);
     if (error) loginScreen(/confirm/i.test(error.message) ? 'Email not confirmed yet. Click the link in the confirmation email first.' : 'Incorrect email or password.');
