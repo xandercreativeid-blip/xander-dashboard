@@ -212,6 +212,9 @@ async function run(ids?: string[]) {
   } else jobs.push(pool(yt, 1, 800, (row) => fetchYouTubePage(row.external_id), count.youtube, deadline));
   if (igSession) jobs.push(pool(ig, 1, 2500, (row) => fetchInstagram(row.external_id, igSession), count.instagram, deadline));
   else for (const row of ig) { await saveError(row, new Error("Instagram butuh sesi akun IG (isi di pengaturan)")); count.instagram.failed++; }
+  // Tanpa sesi IG, permintaan refresh Instagram tidak akan pernah bisa diproses: batalkan agar tidak tertahan "Refresh pending".
+  if (!igSession) await sb.from("contents").update({ refresh_requested_at: null, last_error: "Instagram butuh sesi akun IG (isi di Data Sources & Settings)" })
+    .eq("platform", "instagram").not("refresh_requested_at", "is", null);
   await Promise.all(jobs);
 
   const queued = tt.length + yt.length + ig.length;
