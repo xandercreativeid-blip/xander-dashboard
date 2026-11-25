@@ -84,8 +84,10 @@ views lebih besar.
 
 ## Akses
 
-Siapa pun bisa membuat akun di halaman login, tetapi hanya email yang ada di daftar **Anggota tim**
-(menu Google Sheets & status) yang bisa melihat atau mengubah data.
+Hanya email yang ada di daftar anggota tim (menu **Data Sources & Settings**, tanpa batas jumlah) yang bisa melihat
+atau mengubah data. Akun login dibuat dari menu **Team Accounts**: pilih email → **Create account** → bagikan password
+awalnya secara pribadi; anggota bisa menggantinya lewat **Change my password**. Cara ini tidak memakai email, jadi tidak
+terkena batas pengiriman email Supabase.
 
 ## Catatan
 

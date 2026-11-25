@@ -36,6 +36,8 @@ Tampilan dashboard berbahasa **Inggris**.
   semua konten yang diposting dalam timeline kontrak). Keduanya dihitung per kontrak.
 - Tab yang di-hide di macrosheets = brand Archived. Link yang dihapus dari macrosheets hilang dari dashboard.
 - Hanya email di tabel `team_members` yang bisa melihat data (RLS `is_member()`).
+- Akun anggota dibuat dari dashboard (menu **Team Accounts**, fungsi `team-admin`) tanpa email, karena layanan email
+  bawaan Supabase hanya mengirim ke anggota tim akun Supabase dan dibatasi per jam. Jumlah anggota tidak dibatasi.
 - Jangan pernah meminta, membaca, atau menampilkan password/kredensial. Tab kredensial di macrosheets dilewati.
   Kunci YouTube API dan sesi IG diisi pengguna sendiri lewat dashboard (tersimpan di `private_config`,
   tidak bisa dibaca kembali).
@@ -49,8 +51,8 @@ Jalankan berurutan. Hubungkan konektor **GitHub** dan **Supabase** di akun Claud
    Catat Project URL dan publishable key (`sb_publishable_...`).
 2. **Database**: jalankan `install/install.sql` (apply_migration). Lalu tambahkan email pengguna sebagai
    anggota tim pertama: `insert into team_members (email) values (lower('<email pengguna>'));`
-3. **Edge Functions**: deploy `supabase/functions/sync-sheet` (file: index.ts, xlsxlite.js, urls.js, sheet.js)
-   dan `supabase/functions/collect` (index.ts), keduanya `verify_jwt: true`.
+3. **Edge Functions**: deploy `supabase/functions/sync-sheet` (file: index.ts, xlsxlite.js, urls.js, sheet.js),
+   `supabase/functions/collect` (index.ts) dan `supabase/functions/team-admin` (index.ts), semuanya `verify_jwt: true`.
 4. **Jadwal**: isi `<PROJECT_REF>` dan `<ANON_JWT>` di `install/cron.sql` lalu jalankan. Kunci anon JWT ada di
    Project Settings → API Keys → Legacy API keys. Jangan simpan kunci itu ke repo.
 5. **Login**: di Supabase → Authentication → URL Configuration, isi Site URL dengan alamat GitHub Pages
@@ -60,9 +62,11 @@ Jalankan berurutan. Hubungkan konektor **GitHub** dan **Supabase** di akun Claud
    Settings → Pages → Source: **GitHub Actions**. Workflow `pages.yml` menerbitkan folder `web/`.
    Untuk repo private, GitHub Pages butuh akun berbayar; bila gratis, jadikan repo public (data tetap aman
    karena dilindungi login + RLS).
-8. **Pakai**: buka alamat Pages → Create Account dengan email anggota tim → login → menu
+8. **Pakai**: buat akun pertama pengguna lewat `team-admin` atau Supabase → Authentication → Users → Add user
+   (centang Auto Confirm) → login → menu
    **Data Sources & Settings**: tempel link macrosheets (satu per baris, akses "Siapa saja yang memiliki link:
-   Pelihat"), klik **Save & Sync Now**. Anggota tim lain ditambahkan di menu yang sama.
+   Pelihat"), klik **Save & Sync Now**. Anggota tim lain: tambahkan emailnya di menu yang sama, lalu buatkan
+   akunnya di **Team Accounts**.
 9. Opsional: YouTube API key dan sesi IG diisi pengguna di menu yang sama.
 
 Periksa hasilnya: `select * from settings where key in ('sheet_last_sync','sheet_status','collector_status');`
