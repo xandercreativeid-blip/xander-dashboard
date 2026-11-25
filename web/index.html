@@ -6,24 +6,18 @@
 <title>Xander Performance</title>
 <style>
 :root {
+  /* Palet "Ocean Fresh" — dashboard selalu terang/putih (tidak mengikuti mode gelap perangkat). */
   color-scheme: light;
-  --bg: #f4f3ef; --surface: #fcfcfb; --surface-2: #efeee9; --line: #dfddd5;
-  --text: #0b0b0b; --text-2: #52514e; --text-3: #85837c;
-  --accent: #1d4fa8; --accent-ink: #ffffff;
-  --tiktok: #2a78d6; --instagram: #eb6834; --youtube: #1baf7a;
-  --good: #1b7a3d; --good-bg: #e2f2e6; --warn: #8a5a00; --warn-bg: #fbefd2; --bad: #b3261e; --bad-bg: #fbe4e2;
-  --shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.06);
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --bg: #111110; --surface: #1a1a19; --surface-2: #242422; --line: #33322f;
-    --text: #f0efec; --text-2: #c3c2b7; --text-3: #8d8b83;
-    --accent: #7fa8ee; --accent-ink: #0b0b0b;
-    --tiktok: #3987e5; --instagram: #d95926; --youtube: #199e70;
-    --good: #6fd08c; --good-bg: #173322; --warn: #e6b34a; --warn-bg: #3a2e12; --bad: #f08a83; --bad-bg: #3d1c1a;
-    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.4);
-  }
+  --bg: #ffffff; --surface: #ffffff; --surface-2: #f1f8f8; --line: #dcecec;
+  --text: #0b1f24; --text-2: #4a5d62; --text-3: #7d8f93;
+  --accent: #0f766e; --accent-ink: #ffffff; --accent-soft: #e6f4f2;
+  --side-from: #083344; --side-to: #0f766e;
+  --tiktok: #0284c7; --instagram: #f97316; --youtube: #e11d48;
+  /* warna per metrik di kotak angka */
+  --m-views: #0f766e; --m-contents: #0e7490; --m-likes: #0284c7; --m-comments: #e11d48; --m-shares: #d97706;
+  --m-saves: #16a34a; --m-er: #9333ea; --m-target: #0891b2;
+  --good: #15803d; --good-bg: #dcfce7; --warn: #92400e; --warn-bg: #fef3c7; --bad: #be123c; --bad-bg: #ffe4e6;
+  --shadow: 0 1px 2px rgba(8,51,68,.06), 0 8px 24px rgba(8,51,68,.07);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
@@ -32,20 +26,25 @@ button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 .num { font-variant-numeric: tabular-nums; }
 .app { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100%; }
-.side { background: var(--surface); border-right: 1px solid var(--line); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+.side { background: linear-gradient(180deg, var(--side-from), var(--side-to)); color: #fff; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+.side .brandmark span { color: rgba(255,255,255,.7); }
+.side input[type=search] { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.25); color: #fff; }
+.side input[type=search]::placeholder { color: rgba(255,255,255,.6); }
+.side .btn { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.25); color: #fff; }
+.side .btn:hover { background: rgba(255,255,255,.18); }
 .brandmark { padding: 18px 16px 12px; }
 .brandmark b { display: block; font-size: 15px; letter-spacing: .02em; }
 .brandmark span { color: var(--text-3); font-size: 12px; }
 .side input[type=search] { margin: 0 12px 8px; }
 .brandlist { overflow: auto; flex: 1; padding: 0 8px 8px; }
 .brandlist button { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; border: 0; background: none; padding: 7px 8px; border-radius: 6px; }
-.brandlist button:hover { background: var(--surface-2); }
-.brandlist button[aria-current=true] { background: var(--text); color: var(--surface); }
-.brandlist button small { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.brandlist button:hover { background: rgba(255,255,255,.12); }
+.brandlist button[aria-current=true] { background: #fff; color: var(--accent); font-weight: 600; }
+.brandlist button small { color: rgba(255,255,255,.65); font-variant-numeric: tabular-nums; }
 .brandlist button[aria-current=true] small { color: inherit; opacity: .7; }
 .brandlist .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.brandlist .archived-toggle { margin-top: 10px; border-top: 1px solid var(--line); border-radius: 0; padding-top: 10px; color: var(--text-2); font-weight: 600; }
-.brandlist .archived-list button:not([aria-current=true]) { color: var(--text-2); }
+.brandlist .archived-toggle { margin-top: 10px; border-top: 1px solid rgba(255,255,255,.25); border-radius: 0; padding-top: 10px; color: #fff; font-weight: 600; }
+.brandlist .archived-list button:not([aria-current=true]) { color: rgba(255,255,255,.75); }
 .badge.arch { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--line); vertical-align: middle; margin-left: 8px; font-size: 12px; }
 .sidefoot { border-top: 1px solid var(--line); padding: 10px 12px; display: grid; gap: 6px; }
 .main { padding: 20px 24px 48px; min-width: 0; }
@@ -65,14 +64,19 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 11px; display: inline-flex; align-items: center; gap: 6px; }
 .chip:hover { border-color: var(--text-3); }
-.chip[aria-pressed=true] { background: var(--text); color: var(--surface); border-color: var(--text); }
+.chip[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 .tile .lab { color: var(--text-2); font-size: 12px; }
 .tile .val { font-size: 24px; font-weight: 650; letter-spacing: -.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .tile .note { color: var(--text-3); font-size: 12px; min-height: 17px; }
-.tile.hero { border-color: var(--text); }
+.tile.hero { border-color: var(--line); }
+.tile[data-m] { border-top: 4px solid var(--mc); background: linear-gradient(180deg, color-mix(in srgb, var(--mc) 9%, #fff), #fff 65%); }
+.tile[data-m] .val { color: var(--mc); }
+.tile[data-m=views] { --mc: var(--m-views); } .tile[data-m=contents] { --mc: var(--m-contents); } .tile[data-m=likes] { --mc: var(--m-likes); }
+.tile[data-m=comments] { --mc: var(--m-comments); } .tile[data-m=shares] { --mc: var(--m-shares); } .tile[data-m=saves] { --mc: var(--m-saves); }
+.tile[data-m=er] { --mc: var(--m-er); } .tile[data-m=target] { --mc: var(--m-target); }
 .src { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; }
 .src-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .src-head a { color: var(--accent); font-size: 12px; }
@@ -558,8 +562,8 @@ function render() {
         ${tile('Comments', sum.comments, '', false, psum.comments)}
         ${tile('Shares', sum.shares, manualNote, false, psum.shares)}
         ${tile('Saves', sum.saves, manualNote, false, psum.saves)}
-        <div class="tile"><div class="lab">Engagement Rate</div><div class="val">${pct(sum.er)}</div>${CMP ? delta(sum.er, psum.er, 'pt') : ''}<div class="note">engagements ÷ views</div></div>
-        <div class="tile"><div class="lab">Contents ≥ ${brand ? targetText(brand) + ' Views' : 'Views Target'}</div><div class="val">${nf.format(sum.hit)}<span style="font-size:14px;font-weight:500;color:var(--text-3)"> / ${nf.format(sum.withData)}</span></div>${CMP ? delta(sum.hit, psum.hit) : ''}<div class="note">${sum.withData ? pct(sum.hit / sum.withData) + ' of contents with data' : ''}</div></div>
+        <div class="tile" data-m="er"><div class="lab">Engagement Rate</div><div class="val">${pct(sum.er)}</div>${CMP ? delta(sum.er, psum.er, 'pt') : ''}<div class="note">engagements ÷ views</div></div>
+        <div class="tile" data-m="target"><div class="lab">Contents ≥ ${brand ? targetText(brand) + ' Views' : 'Views Target'}</div><div class="val">${nf.format(sum.hit)}<span style="font-size:14px;font-weight:500;color:var(--text-3)"> / ${nf.format(sum.withData)}</span></div>${CMP ? delta(sum.hit, psum.hit) : ''}<div class="note">${sum.withData ? pct(sum.hit / sum.withData) + ' of contents with data' : ''}</div></div>
       </div>
       ${brand ? kpiCard(brand) : ''}
       <section class="card">
@@ -635,8 +639,11 @@ function kpiCard(b) {
       <div class="kpi-progress">${rows.length ? rows.map(([l, v, bar, note]) => `<div class="krow"><div class="kl"><span>${l}</span><b class="num">${v}</b></div>${bar}<div class="sub">${note}</div></div>`).join('') : '<div class="sub">No numeric KPI (Quantity, Total Video, KPI FYP or KPI Views) in the macrosheets yet.</div>'}</div>
     </div></section>`;
 }
+// Kunci warna kotak angka dari judulnya (Views, Likes, ..., Engagement Rate, Contents ≥ target).
+const metricOf = (label) => { const l = String(label).toLowerCase(); return /≥|target/.test(l) ? 'target' : /engagement/.test(l) ? 'er' : /view/.test(l) ? 'views'
+  : /content/.test(l) ? 'contents' : /like/.test(l) ? 'likes' : /comment/.test(l) ? 'comments' : /share/.test(l) ? 'shares' : /save/.test(l) ? 'saves' : ''; };
 function tile(label, value, note = '', hero = false, prev) {
-  return `<div class="tile${hero ? ' hero' : ''}"><div class="lab">${label}</div><div class="val" title="${nf.format(value)}">${value >= 100000 ? cf.format(value) : nf.format(value)}</div>${prev !== undefined ? delta(value, prev) : ''}<div class="note">${note}</div></div>`;
+  return `<div class="tile${hero ? ' hero' : ''}" data-m="${metricOf(label)}"><div class="lab">${label}</div><div class="val" title="${nf.format(value)}">${value >= 100000 ? cf.format(value) : nf.format(value)}</div>${prev !== undefined ? delta(value, prev) : ''}<div class="note">${note}</div></div>`;
 }
 // Tanda naik/turun dibanding periode sebelumnya. kind 'pt' = selisih poin persentase (untuk ER).
 function delta(cur, prev, kind) {
@@ -1021,7 +1028,7 @@ async function exportPdf(d) {
   doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text(clean(`Content Performance Report - ${d.meta.title}`), M, 48);
   doc.setFont('helvetica', 'normal');
   const rightHead = (data) => { if (data.section === 'head' && data.column.index > 0) data.cell.styles.halign = 'right'; };
-  const opts = { margin: { left: M, right: M }, styles: { fontSize: 8, cellPadding: 4 }, headStyles: { fillColor: [29, 79, 168] }, theme: 'striped' };
+  const opts = { margin: { left: M, right: M }, styles: { fontSize: 8, cellPadding: 4 }, headStyles: { fillColor: [15, 118, 110] }, theme: 'striped' };
   doc.autoTable({ margin: { left: M, right: M }, startY: 58, theme: 'plain', body: metaLines(d).map(([k, v]) => [clean(k), clean(v)]),
     styles: { fontSize: 8.5, cellPadding: 1.5, textColor: 70 }, columnStyles: { 0: { fontStyle: 'bold', cellWidth: 190 } } });
   const heading = (t, y) => { doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text(t, M, y); doc.setFont('helvetica', 'normal'); return y + 8; };
@@ -1045,7 +1052,7 @@ async function exportDocx(d) {
   await needLibs('docx');
   const D = window.docx;
   const cell = (t, opts = {}) => new D.TableCell({ children: [new D.Paragraph({ alignment: opts.right ? D.AlignmentType.RIGHT : D.AlignmentType.LEFT, children: [new D.TextRun({ text: String(t), bold: !!opts.bold, size: 17, color: opts.head ? 'FFFFFF' : undefined })] })],
-    shading: opts.head ? { fill: '1D4FA8', type: D.ShadingType.CLEAR, color: 'auto' } : undefined, margins: { top: 50, bottom: 50, left: 80, right: 80 } });
+    shading: opts.head ? { fill: '0F766E', type: D.ShadingType.CLEAR, color: 'auto' } : undefined, margins: { top: 50, bottom: 50, left: 80, right: 80 } });
   const table = (head, rows, rightFrom = 1) => new D.Table({ width: { size: 100, type: D.WidthType.PERCENTAGE },
     rows: [new D.TableRow({ tableHeader: true, children: head.map((h, i) => cell(h, { head: true, bold: true, right: i >= rightFrom })) }),
       ...rows.map((r) => new D.TableRow({ children: r.map((v, i) => cell(v, { right: i >= rightFrom })) }))] });
@@ -1074,8 +1081,8 @@ async function exportPptx(d) {
   await needLibs('pptx');
   const pptx = new window.PptxGenJS();
   pptx.layout = 'LAYOUT_WIDE'; pptx.author = 'Xander Creative Agency'; pptx.title = `Content Performance — ${d.meta.title}`;
-  const INK = '1F2937', MUTED = '6B7280', ACCENT = '1D4FA8';
-  const COLORS = { tiktok: '2A78D6', instagram: 'EB6834', youtube: '1BAF7A' };
+  const INK = '0B1F24', MUTED = '4A5D62', ACCENT = '0F766E';
+  const COLORS = { tiktok: '0284C7', instagram: 'F97316', youtube: 'E11D48' };
   const title = (s, t, sub) => { s.addText(t, { x: 0.5, y: 0.35, w: 12.3, h: 0.6, fontSize: 26, bold: true, color: INK, fontFace: 'Calibri' });
     if (sub) s.addText(sub, { x: 0.5, y: 0.95, w: 12.3, h: 0.35, fontSize: 12, color: MUTED, fontFace: 'Calibri' }); };
   const tbl = (s, head, rows, y, colW) => s.addTable([head.map((h) => ({ text: h, options: { bold: true, color: 'FFFFFF', fill: { color: ACCENT } } })), ...rows.map((r) => r.map((v) => (v && typeof v === 'object' ? v : { text: String(v) })))],
@@ -1266,7 +1273,7 @@ function renderTv() {
   const allName = 'All Brands';   // nama macrosheets tidak ditampilkan di layar TV
   const nextName = nextId === 'all' ? allName : S.brandMap.get(nextId)?.name || '';
   const big = (v) => (v >= 100000 ? cf.format(v) : nf.format(v));
-  const k = (label, val, note = '', d = '') => `<div class="tile"><div class="lab">${label}</div><div class="val">${val}</div>${d}<div class="note">${note}</div></div>`;
+  const k = (label, val, note = '', d = '') => `<div class="tile" data-m="${metricOf(label)}"><div class="lab">${label}</div><div class="val">${val}</div>${d}<div class="note">${note}</div></div>`;
   let side;
   if (!brand) {
     const rows = countedBrands().map((b) => ({ b, s: summarize(list.filter((c) => c.brand_id === b.id)) })).filter((r) => r.s.n).sort((a, z) => z.s.views - a.s.views).slice(0, 8);
