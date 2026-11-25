@@ -26,6 +26,9 @@ Tampilan dashboard berbahasa **Inggris**.
   menentukan bulan konten; tanggal dari platform hanya cadangan.
 - Angka tiap metrik = yang tertinggi antara macrosheets (`sheet`) dan platform (`live`); isian manual (✎) menang
   sampai angka di macrosheets berubah.
+- Likes/comments/shares/saves dari macrosheets yang lebih besar dari views dianggap salah ketik dan diabaikan
+  (`merge_metrics`); dashboard menampilkan daftarnya ("Numbers to fix in the macrosheets") agar tim membetulkan sheet.
+- Tampilan: palet "Ocean Fresh", selalu mode terang dengan latar abu-teal lembut (bukan putih menyilaukan).
 - ER = (likes + comments + shares + saves) / views. Target views default 10K; FYP Quantity di blok KPI
   macrosheets menjadi target per platform.
 - Blok KPI di atas tiap tab dibaca menurut **artinya**, bukan posisi atau template: format antar macrosheets berbeda

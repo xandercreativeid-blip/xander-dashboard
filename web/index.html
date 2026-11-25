@@ -8,7 +8,8 @@
 :root {
   /* Palet "Ocean Fresh" — dashboard selalu terang/putih (tidak mengikuti mode gelap perangkat). */
   color-scheme: light;
-  --bg: #ffffff; --surface: #ffffff; --surface-2: #f1f8f8; --line: #dcecec;
+  /* latar abu-teal lembut + kartu putih gading: tidak menyilaukan, tetap terang */
+  --bg: #e9f0f0; --surface: #f9fbfb; --surface-2: #eef5f5; --line: #d3e3e3; --line-strong: #b9cfcf; --zebra: #f1f6f6;
   --text: #0b1f24; --text-2: #4a5d62; --text-3: #7d8f93;
   --accent: #0f766e; --accent-ink: #ffffff; --accent-soft: #e6f4f2;
   --side-from: #083344; --side-to: #0f766e;
@@ -72,7 +73,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .tile .val { font-size: 24px; font-weight: 650; letter-spacing: -.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .tile .note { color: var(--text-3); font-size: 12px; min-height: 17px; }
 .tile.hero { border-color: var(--line); }
-.tile[data-m] { border-top: 4px solid var(--mc); background: linear-gradient(180deg, color-mix(in srgb, var(--mc) 9%, #fff), #fff 65%); }
+.tile[data-m] { border-top: 4px solid var(--mc); background: linear-gradient(180deg, color-mix(in srgb, var(--mc) 9%, var(--surface)), var(--surface) 65%); }
+.datacheck { margin-top: 14px; padding: 10px 14px; border: 1px solid var(--warn); background: var(--warn-bg); color: var(--warn); border-radius: 10px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .tile[data-m] .val { color: var(--mc); }
 .tile[data-m=views] { --mc: var(--m-views); } .tile[data-m=contents] { --mc: var(--m-contents); } .tile[data-m=likes] { --mc: var(--m-likes); }
 .tile[data-m=comments] { --mc: var(--m-comments); } .tile[data-m=shares] { --mc: var(--m-shares); } .tile[data-m=saves] { --mc: var(--m-saves); }
@@ -117,8 +119,9 @@ svg text { fill: var(--text-3); font-size: 11px; }
 .tip div span:first-child { display: inline-flex; align-items: center; gap: 5px; color: var(--text-2); }
 .scroll { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; }
-th, td { padding: 8px 10px; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; }
-th { color: var(--text-2); font-weight: 600; font-size: 12px; border-top: 0; user-select: none; }
+th, td { padding: 9px 10px; border-top: 1px solid var(--line-strong); text-align: right; white-space: nowrap; }
+th { color: var(--text-2); font-weight: 600; font-size: 12px; border-top: 0; border-bottom: 2px solid var(--line-strong); background: var(--surface-2); user-select: none; }
+tbody tr:nth-child(even) { background: var(--zebra); }
 th[data-sort] { cursor: pointer; }
 th[data-sort]:hover { color: var(--text); }
 th:first-child, td:first-child, th.l, td.l { text-align: left; }
@@ -572,6 +575,7 @@ function render() {
         <div class="scroll" id="monthly"></div>
       </section>
       ${S.brandId === 'all' ? '<section class="card"><header><h2>Brand Comparison</h2></header><div class="scroll" id="brandTable" style="margin-top:8px"></div></section>' : ''}
+      ${dataCheckBar(list)}
       <section class="card">
         <header><h2>Content List</h2><div class="actions"><input type="search" id="q" placeholder="Search title / link…" value="${esc(S.q)}" aria-label="Search contents"><button class="btn" id="csv">⤓ Export</button></div></header>
         <div class="scroll" id="contentTable" style="margin-top:8px"></div>
@@ -782,6 +786,31 @@ function sortedContents(list) {
   });
   return rows;
 }
+// Cek data macrosheets: likes/komentar/shares/saves lebih besar dari views = hampir pasti salah ketik.
+// Database sudah mengabaikannya (lihat merge_metrics); di sini hanya ditampilkan agar tim bisa membetulkan sheet-nya.
+function sheetIssues(list) {
+  const out = [];
+  for (const c of list) {
+    const sh = c.sheet; if (!sh) continue;
+    const v = Math.max(sh.views || 0, c.views || 0); if (!v) continue;
+    for (const m of ['likes', 'comments', 'shares', 'saves']) if ((sh[m] || 0) > v && sh[m] > 50) out.push({ c, m, val: sh[m], v });
+  }
+  return out;
+}
+function dataCheckBar(list) {
+  const n = new Set(sheetIssues(list).map((x) => x.c.id)).size;
+  return n ? `<div class="datacheck"><span>⚠ <b>${nf.format(n)} contents</b> have Likes/Comments/Shares/Saves in the macrosheets that are higher than their views — most likely a typo. These numbers are ignored until fixed.</span><button class="btn" id="dataCheck">Show list</button></div>` : '';
+}
+function dataCheckDialog(list) {
+  const rows = sheetIssues(list).sort((a, z) => (S.brandMap.get(a.c.brand_id)?.name || '').localeCompare(S.brandMap.get(z.c.brand_id)?.name || '') || String(a.c.posted_at).localeCompare(String(z.c.posted_at)));
+  const tab = (c) => Object.values(c.sheet_refs || {})[0] || S.brandMap.get(c.brand_id)?.name || '';
+  dialog(`<h3>Numbers to fix in the macrosheets</h3>
+    <div class="hint">These cells are bigger than the video's views, which is not possible. Fix them in the macrosheets; the dashboard picks up the correction automatically.</div>
+    <div class="scroll" style="max-height:55vh"><table><thead><tr><th>Tab · Posted</th><th class="l">Link</th><th class="l">Wrong cell</th></tr></thead><tbody>
+    ${rows.map((x) => `<tr><td>${esc(tab(x.c))}<div class="sub">${dateLabel(dayKey(x.c.posted_at))} · ${PLAT[x.c.platform]}</div></td><td class="l" style="max-width:200px;overflow:hidden;text-overflow:ellipsis"><a href="${esc(x.c.url)}" target="_blank" rel="noopener">${esc(x.c.url.replace(/^https:\/\/(www\.)?/, ''))}</a></td><td class="l">${x.m[0].toUpperCase() + x.m.slice(1)} <b style="color:var(--bad)">${nf.format(x.val)}</b><div class="sub">views only ${nf.format(x.v)}</div></td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="foot"><span></span><span><button class="btn primary" value="cancel" formnovalidate>Close</button></span></div>`, async () => {});
+}
 function renderContents(list) {
   const rows = sortedContents(list), all = S.brandId === 'all', per = 50;
   const pages = Math.max(1, Math.ceil(rows.length / per));
@@ -839,6 +868,7 @@ function bind(list) {
   });
   on('#addLinks', 'click', linksDialog);
   on('#openSettings', 'click', settingsDialog);
+  on('#dataCheck', 'click', () => dataCheckDialog(list));
   on('#openTeam', 'click', teamDialog);
   on('#openSources', 'click', sourcesDialog);
   on('#logout', 'click', async () => { await DB.sb.auth.signOut(); location.reload(); });

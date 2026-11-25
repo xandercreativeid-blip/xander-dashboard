@@ -66,13 +66,16 @@ $function$;
 
 create or replace function public.merge_metrics() returns trigger
  language plpgsql set search_path to 'public' as $function$
+declare v bigint;
 begin
   if new.source <> 'manual' and (new.live is not null or new.sheet is not null) then
-    new.views    := greatest((new.live ->> 'views')::bigint,    (new.sheet ->> 'views')::bigint);
-    new.likes    := greatest((new.live ->> 'likes')::bigint,    (new.sheet ->> 'likes')::bigint);
-    new.comments := greatest((new.live ->> 'comments')::bigint, (new.sheet ->> 'comments')::bigint);
-    new.shares   := greatest((new.live ->> 'shares')::bigint,   (new.sheet ->> 'shares')::bigint);
-    new.saves    := greatest((new.live ->> 'saves')::bigint,    (new.sheet ->> 'saves')::bigint);
+    new.views := greatest((new.live ->> 'views')::bigint, (new.sheet ->> 'views')::bigint);
+    v := new.views;
+    -- Angka macrosheets yang lebih besar dari views (likes/komentar/shares/saves) pasti salah ketik: diabaikan.
+    new.likes    := greatest((new.live ->> 'likes')::bigint,    case when v is null or (new.sheet ->> 'likes')::bigint    <= v then (new.sheet ->> 'likes')::bigint end);
+    new.comments := greatest((new.live ->> 'comments')::bigint, case when v is null or (new.sheet ->> 'comments')::bigint <= v then (new.sheet ->> 'comments')::bigint end);
+    new.shares   := greatest((new.live ->> 'shares')::bigint,   case when v is null or (new.sheet ->> 'shares')::bigint   <= v then (new.sheet ->> 'shares')::bigint end);
+    new.saves    := greatest((new.live ->> 'saves')::bigint,    case when v is null or (new.sheet ->> 'saves')::bigint    <= v then (new.sheet ->> 'saves')::bigint end);
   end if;
   if new.source <> 'manual' and (new.sheet ->> 'posted_at') is not null then
     new.posted_at := (new.sheet ->> 'posted_at')::timestamptz;   -- Tanggal Upload di macrosheets = acuan
